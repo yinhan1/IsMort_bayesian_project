@@ -1,0 +1,108 @@
+---
+title: "Exp Weibull"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  bookdown::html_document2:
+    number_sections: no
+    fig_caption: true
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: hide
+header-includes:
+- \usepackage{graphicx}
+- \usepackage{float}
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup knit, include=FALSE}
+knitr::opts_chunk$set(
+	fig.align = "center",
+	fig.pos = "H",
+	message = FALSE,
+	warning = FALSE,
+	external = TRUE,
+	echo = TRUE
+)
+
+library(tidyverse)
+library(magrittr)
+library(ggsci)
+library(kableExtra)
+
+source("../R script/functions.R")
+```
+
+
+```{r clean data}
+# load raw data and clean
+ismort_death_count <- 
+  readxl::read_excel("../data/IS data.xlsx") %>% 
+  clean_data(cols_to_numeric = c("Day after spray","Deaths"))
+
+# convert death counts to death status
+ismort_death_status <- 
+  ismort_death_count %>% 
+  convert_to_death_status()
+```
+
+
+```{r calculate empirical ttt}
+# set length out for quantile sequence
+set_length_out <- 2000
+
+# calculate empirical total time on test 
+empirical_ttt_sex_comb <- 
+  ismort_death_status %>% 
+  group_by(Population, Treatment, `Age at spray`) %>% 
+  do(data.frame(u = seq(0, 1, length.out = set_length_out),
+                ttt = get_ttt_quantile(.$`Day after spray`, set_length_out),
+                tag = paste(.$Population[1], .$Treatment[1])))
+```
+
+
+
+
+
+
+
+
+
+
+## Empirical TTT {.tabset}
+
+### ACO 
+
+```{r fig.width=7}
+empirical_ttt %>% filter(Population == "ACO") %>% plot_ttt_quantile()
+```
+
+### CO
+
+```{r fig.width=7, fig.height=8}
+empirical_ttt %>% filter(Population == "CO") %>% plot_ttt_quantile()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
