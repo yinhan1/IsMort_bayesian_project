@@ -27,47 +27,44 @@ knitr::opts_chunk$set(
 )
 
 library(tidyverse)
+library(data.table)
 library(magrittr)
 library(ggsci)
 library(kableExtra)
+library(SPREDA)
 
-source("../R script/functions.R")
+source("../R_script/functions.R")
 ```
 
 
 ```{r clean data}
 # load raw data and clean
 ismort_death_count <- 
-  readxl::read_excel("../data/IS data.xlsx") %>% 
+  readxl::read_excel("../data/IS_data.xlsx") %>% 
   clean_data(cols_to_numeric = c("Day after spray","Deaths"))
 
 # convert death counts to death status
 ismort_death_status <- 
   ismort_death_count %>% 
   convert_to_death_status()
+
+# split data into 5 folds for cross validation later
+folds <- caret::createFolds(1:nrow(ismort_death_status), k = 5, list = TRUE, returnTrain = FALSE)
 ```
 
 
-```{r calculate empirical ttt}
+```{r calculate empirical ttt, message=FALSE}
 # set length out for quantile sequence
 set_length_out <- 2000
 
 # calculate empirical total time on test 
-empirical_ttt_sex_comb <- 
+empirical_ttt <- 
   ismort_death_status %>% 
-  group_by(Population, Treatment, `Age at spray`) %>% 
+  group_by(Population, Treatment, Age, Sex) %>% 
   do(data.frame(u = seq(0, 1, length.out = set_length_out),
-                ttt = get_ttt_quantile(.$`Day after spray`, set_length_out),
+                ttt = get_ttt_quantile(.$Day, set_length_out),
                 tag = paste(.$Population[1], .$Treatment[1])))
 ```
-
-
-
-
-
-
-
-
 
 
 ## Empirical TTT {.tabset}
@@ -85,24 +82,57 @@ empirical_ttt %>% filter(Population == "CO") %>% plot_ttt_quantile()
 ```
 
 
+## Models on ACO {.tabset}
+
+### Weibull
+
+```{r}
+ismort_death_status %>% filter(Population=="ACO") %>% get_best_model("weibull")
+```
+
+### Exp Weibull
+
+```{r}
+ismort_death_status %>% filter(Population=="ACO") %>% get_best_model("exponential")
+```
+
+### log-Normal
+
+```{r}
+ismort_death_status %>% filter(Population=="ACO") %>% get_best_model(dist = "lognormal")
+```
+
+### logistic
+
+```{r}
+ismort_death_status %>% filter(Population=="ACO") %>% get_best_model(dist = "logistic")
+```
 
 
+## Models on CO {.tabset}
 
+### Weibull
 
+```{r}
+ismort_death_status %>% filter(Population=="CO") %>% get_best_model("weibull")
+```
 
+### Exp Weibull
 
+```{r}
+ismort_death_status %>% filter(Population=="CO") %>% get_best_model("exponential")
+```
 
+### log-Normal
 
+```{r}
+ismort_death_status %>% filter(Population=="CO") %>% get_best_model(dist = "lognormal")
+```
 
+### logistic
 
-
-
-
-
-
-
-
-
-
+```{r}
+ismort_death_status %>% filter(Population=="CO") %>% get_best_model(dist = "logistic")
+```
 
 
