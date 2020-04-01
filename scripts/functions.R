@@ -55,21 +55,14 @@ log_likelihood <- function(data, alpha, theta, coefs){
 #### random sampler for log_alpha and log_theta -------------------- ####
 
 log_shape_sampler <- function(log_alpha, log_theta, multiplier){
-  m = matrix(c(0.0009963969,-0.001257686,-0.001257686,0.003420546), ncol=2)
+  m = matrix(c(0.0006053001,-0.001027386,-0.001027386,0.002148208), ncol=2)
   MASS::mvrnorm(1, c(log_alpha, log_theta), multiplier*m)
 }
 
 #### random sampler for coefficients ------------------------------- ####
 
 coefs_sampler <- function(coefs, multiplier){
-  # m = matrix(c(
-  #   4.534671e-04,-1.016838e-04,-3.380458e-05,-2.082121e-04,-2.134622e-04,
-  #   -1.016838e-04,1.588248e-04,-4.387153e-06,3.650657e-07,-1.099612e-05,
-  #   -3.380458e-05,-4.387153e-06,1.459099e-04,-1.705829e-05,-3.188944e-06,
-  #   -2.082121e-04,3.650657e-07,-1.705829e-05,2.629499e-04,2.075979e-04,
-  #   -2.134622e-04,-1.099612e-05,-3.188944e-06,2.075979e-04,3.154425e-04
-  # ), ncol=5)
-  m = dummy_m
+  m = diag(x = length(coefs)) * c(0.0001)
   MASS::mvrnorm(1, coefs, multiplier*m)
 }
 
