@@ -11,7 +11,7 @@ ad = ad/365
 ###################################################### Inverse CDF method for sampling from the Exponentiated Weibull
 
 
-r.expweibull = function(n,alpha, theta, sigma) { 
+r.expweibull = function(n, alpha, theta, sigma) { 
   #alpha, theata = shape; sigma = scale
   Y = numeric(n)
   Y = runif(n)
