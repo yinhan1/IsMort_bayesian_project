@@ -172,8 +172,10 @@ aco_survival_function %>%
 #   burn_n_thin_draws(jump = 400, burn_at = 2)
 
 posterior_dist <-
-  read.csv("../data/post_dist_3_31_2020/posterior_co_slow.csv")[-1,] %>%
-  burn_n_thin_draws(jump = 300, burn_at = 8000)
+  read.csv("../data/posterior_co_random_initial.csv.csv")[-1,] %>%
+  burn_n_thin_draws(jump = 200, burn_at = 5000)
+
+posterior_dist <- outcomes %>% burn_n_thin_draws(jump = 200, burn_at = 5000) %>% as.data.frame()
 ```
 
 ```{r}
@@ -182,7 +184,7 @@ apply(posterior_dist[,c(1:2)], 2, function(c) acf(c))
 ```
 
 ```{r}
-par(mfrow=c(4,4)) 
+par(mfrow=c(4,5)) 
 apply(posterior_dist[,-c(1:2)], 2, function(c) acf(c))
 ```
 
@@ -205,7 +207,7 @@ posterior_dist %>%
 ```{r calculate co survival function}
 longest = 120
 sigma_calculator <- function(row, x_vector){
-  exp(sum(row[3:16] * x_vector))
+  exp(sum(row[3:22] * x_vector))
 }
 
 get_survival_function <- function(dummy_posterior_dist, x_fit){
@@ -238,10 +240,15 @@ co_subgroups <-
     female_14 = female*age_14,
     female_28 = female*age_28,
     female_42 = female*age_42,
-    female_56 = female*age_56
+    female_56 = female*age_56,
+    female_inf_14 = female*infected*age_14,
+    female_inf_28 = female*infected*age_28,
+    female_inf_42 = female*infected*age_42,
+    female_inf_56 = female*infected*age_56,
   ) %>% 
   dplyr::select(c(intercept, infected, female, age_14, age_28, age_42, age_56,
-                  inf_female, inf_14, inf_28, inf_42, inf_56, female_14, female_28, female_42, female_56)) %>% 
+                  inf_female, inf_14, inf_28, inf_42, inf_56, female_14, female_28, female_42, female_56,
+                  female_inf_14, female_inf_28, female_inf_42, female_inf_56)) %>% 
   unique()
 
 get_survival_bounds <- function(data, x_fit){
