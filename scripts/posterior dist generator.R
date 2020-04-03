@@ -11,23 +11,7 @@ source("./scripts/functions.R")
 
 #### step 1: filter out ACO and dummy categorical features ####
 
-is_dummy <- 
-  is_data %>% 
-  filter(Population == "ACO") %>% 
-  mutate(
-    intercept = 1,
-    infected = ifelse(Treatment == "Infected", 1, 0),
-    female = ifelse(Sex == "Female", 1, 0),
-    age_14 = ifelse(Age == 14, 1, 0),
-    age_28 = ifelse(Age == 28, 1, 0),
-    inf_female = infected*female, 
-    inf_14 = infected*age_14,
-    inf_28 = infected*age_28,
-    female_14 = female*age_14,
-    female_28 = female*age_28
-  ) %>% 
-  dplyr::select(c(Day, intercept, infected, female, age_14, age_28,
-                  inf_female, inf_14, inf_28, female_14, female_28))
+is_dummy <- is_data %>% filter(Population == "ACO") %>% dummy_aco()
 
 #### step 2: initial values and draws from MH algorithm ####
 
@@ -143,7 +127,7 @@ as.data.frame(outcomes) %>%
 #### step 4: save posterior dist and acceptance rate ####
 
 outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
-# write.csv(outcomes, file = "./data/posterior_aco.csv", row.names = FALSE)
+# write.csv(outcomes, file = "./data/posterior_aco_trial.csv", row.names = FALSE)
 
 
 
@@ -151,29 +135,7 @@ outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
 
 #### step 1: filter out CO and dummy categorical features ####
 
-is_dummy <- 
-  is_data %>% 
-  filter(Population == "CO") %>% 
-  mutate(
-    intercept = 1,
-    infected = ifelse(Treatment == "Infected", 1, 0),
-    female = ifelse(Sex == "Female", 1, 0),
-    age_14 = ifelse(Age == 14, 1, 0),
-    age_28 = ifelse(Age == 28, 1, 0),
-    age_42 = ifelse(Age == 42, 1, 0),
-    age_56 = ifelse(Age == 56, 1, 0),
-    inf_female = infected*female, 
-    inf_14 = infected*age_14,
-    inf_28 = infected*age_28,
-    inf_42 = infected*age_42,
-    inf_56 = infected*age_56,
-    female_14 = female*age_14,
-    female_28 = female*age_28,
-    female_42 = female*age_42,
-    female_56 = female*age_56
-  ) %>% 
-  dplyr::select(c(Day, intercept, infected, female, age_14, age_28, age_42, age_56,
-                  inf_female, inf_14, inf_28, inf_42, inf_56, female_14, female_28, female_42, female_56))
+is_dummy <- is_data %>% filter(Population == "CO") %>% dummy_co()
 
 #### step 2: initial values and draws from MH algorithm ####
 
@@ -182,11 +144,10 @@ a1 <- a2 <- 0
 
 outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
 colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
-# outcomes[1,] = c(1,5,1.1,rep(0, ncol(outcomes)-3))
-# outcomes[1,] = c(3.2,0.4,2.6,rep(0, ncol(outcomes)-3))
-outcomes[1,] = c(3.68270763,0.33296154,2.62699638,-0.69282490,0.27977484,1.36118492,
-                 1.17942181,0.82778030,0.52509799,-0.08029493,0.44532987,0.17147463,
-                 -0.49091124,0.33804166,-0.15852870,-0.33884779,-0.23518983,-0.27212150)
+outcomes[1,] <- c(
+  1.097296367,   4.953922497,   1.209283349,  -0.482228059,   0.025895856,   1.832793248,   1.453513721,   
+  0.735576928,   0.250055192,  -0.015691754,  -0.884285239,  -0.906604992,   -0.521759576,  -0.309321503,
+  0.158424317,   0.096360510,   0.325413932,   0.152977188,   0.064844156,   0.006385447,  -0.182813001,   0.042295215 )
 
 #### step 3: for loop of MH algorithm
 
@@ -196,7 +157,7 @@ for(iter in 2:(B+1)){
   # propose new shape
   log_shape_proposed = log_shape_sampler2(log_alpha = log(outcomes[iter-1,1]),
                                           log_theta = log(outcomes[iter-1,2]),
-                                          multiplier = 1)
+                                          multiplier = 0.05)
   loglike = log_likelihood(data = is_dummy,
                            alpha = exp(log_shape_proposed[1]),
                            theta = exp(log_shape_proposed[2]),
@@ -237,7 +198,7 @@ for(iter in 2:(B+1)){
   #### ---------------------- MH for scale/coefs ---------------------- ####
   # propose new coefs
   coefs_proposed = coefs_sampler2(coefs = outcomes[iter-1,3:ncol(outcomes)], 
-                                  multiplier = 1)
+                                  multiplier = 0.05)
   loglike = log_likelihood(data = is_dummy,
                            alpha = outcomes[iter,1],
                            theta = outcomes[iter,2],
@@ -295,5 +256,5 @@ outcomes %>%
 #### step 4: save posterior dist and acceptance rate ####
 
 outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
-# write.csv(outcomes, file = "./data/posterior_co_random.csv", row.names = FALSE)
+# write.csv(outcomes, file = "./data/posterior_co_trial.csv", row.names = FALSE)
 

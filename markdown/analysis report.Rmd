@@ -38,9 +38,7 @@ source("../scripts/functions.R")
 ## Raw data
 
 ```{r clean raw data}
-is_data <- 
-  readxl::read_excel("../data/IS_data.xlsx") %>% 
-  clean_data(cols_to_numeric = c("Day after spray","Deaths"))
+is_data <- readxl::read_excel("../data/IS_data.xlsx") %>% clean_data(cols_to_numeric = c("Day after spray","Deaths"))
 ```
 
 ```{r plot raw data}
@@ -55,9 +53,7 @@ is_data %>%
 ### ACO
 
 ```{r}
-posterior_dist <- 
-  read.csv("../data/post_dist_3_31_2020/posterior_aco.csv")[-1,] %>% 
-  burn_n_thin_draws(jump = 200, burn_at = 8000)
+posterior_dist <- read.csv("../data/posterior_aco.csv")[-1,] %>% burn_n_thin_draws(jump = 200, burn_at = 8000)
 
 par(mfrow=c(4,3)) 
 apply(posterior_dist, 2, function(c) acf(c))
@@ -78,83 +74,23 @@ apply(posterior_dist, 2, function(c) (quantile(c, probs = c(0.025, 0.5, 0.975)))
 ```
 
 ```{r calculate aco survival function}
-sigma_calculator <- function(row, x_vector){
-  exp(sum(row[3:12] * x_vector))
-}
+max_day <- 47
+aco_subgroups <- is_data %>% filter(Population == "ACO") %>% dummy_aco() %>% dplyr::select(-Day) %>% unique()
 
-get_survival_function <- function(dummy_posterior_dist, x_fit){
-  dummy_posterior_dist$sigma <- apply(dummy_posterior_dist, 1, function(r) sigma_calculator(r, x_fit)) 
-  seq(2:47) %>% 
-    sapply(function(day)(
-      apply(dummy_posterior_dist, 1, function(row) (
-        1 - cdf_calculator(t = day, alpha = row[1], theta = row[2], sigma = row[13])
-        ))
-      )) %>% 
-  as.data.frame()
-}
-
-aco_subgroups <- 
-  is_data %>% 
-  filter(Population == "ACO") %>% 
-  mutate(
-    intercept = 1,
-    infected = ifelse(Treatment == "Infected", 1, 0),
-    female = ifelse(Sex == "Female", 1, 0),
-    age_14 = ifelse(Age == 14, 1, 0),
-    age_28 = ifelse(Age == 28, 1, 0),
-    inf_female = infected*female, 
-    inf_14 = infected*age_14,
-    inf_28 = infected*age_28,
-    female_14 = female*age_14,
-    female_28 = female*age_28
-  ) %>% 
-  dplyr::select(c(intercept, infected, female, age_14, age_28,
-                  inf_female, inf_14, inf_28, female_14, female_28)) %>% 
-  unique()
-
-get_survival_bounds <- function(data, x_fit){
-  dummy_data = get_survival_function(data, x_fit)
-  apply(dummy_data, 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
-    as.data.frame()
-}
-
-convert_age_back <- function(age_14, age_28){
-  if(age_14 == 1) {return(14)}
-  if(age_28 == 1) {return(28)}
-  if((age_14==0) && (age_28==0)) {return(42)}
-}
-
-aco_survival_function <- 
-  apply(aco_subgroups, 1, function(row) get_survival_bounds(posterior_dist, x_fit = row)) %>% 
+aco_survival <- 
+  apply(aco_subgroups, 1, function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>% 
   data.frame() %>% 
-  rbind(Day = rep(c(2:47), nrow(aco_subgroups))) %>% 
-  t() %>% 
-  set_colnames(c("lower","est","upper","Day")) %>% 
-  cbind(
-    aco_subgroups[rep(1:nrow(aco_subgroups), each = length(c(2:47))),]
-  ) %>% 
+  add_initial(aco_subgroups, max_day = max_day) %>% 
   rowwise() %>% 
   mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
          Sex = ifelse(female == 1, "Female", "Male"),
          Age = convert_age_back(age_14, age_28)) %>% 
-  select(Treatment,Sex,Age,Day, est, lower, upper)
+  select(Treatment, Sex, Age, Day, est, lower, upper)
 ```
 
 
 ```{r plot aco survival function}
-aco_survival_function %>% 
-  filter(est > 0.007) %>% 
-  ggplot(aes(x = Day + Age, 
-             linetype = Treatment,
-             group = interaction(Treatment,Sex,Age))) +
-  geom_line(aes(y = est), color = "brown3", size = 0.5) +
-  geom_line(aes(y = lower), color = "brown3", size = 0.5) +
-  geom_line(aes(y = upper), color = "brown3", size = 0.5) +
-  scale_linetype_manual(values = c("Infected" = "solid", "Uninfected" = "dashed")) +
-  facet_grid(Sex~.) +
-  theme_minimal() +
-  labs(x = "Days after spray", y = "Survival function") +
-  xlim(10,100)
+aco_survival %>% plot_survival(color = "brown3")
 ```
 
 
@@ -164,21 +100,8 @@ aco_survival_function %>%
 ### CO
 
 ```{r}
-# posterior_dist <-
-#   rbind(
-#     read.csv("../data/posterior_co_1.csv")[-1,],
-#     read.csv("../data/posterior_co_2.csv")[-c(1,2),]
-#   ) %>%
-#   burn_n_thin_draws(jump = 400, burn_at = 2)
+posterior_dist <- read.csv("../data/posterior_co.csv")[-1,] %>% burn_n_thin_draws(jump = 350, burn_at = 1)
 
-posterior_dist <-
-  read.csv("../data/posterior_co_random_initial.csv.csv")[-1,] %>%
-  burn_n_thin_draws(jump = 200, burn_at = 5000)
-
-posterior_dist <- outcomes %>% burn_n_thin_draws(jump = 200, burn_at = 5000) %>% as.data.frame()
-```
-
-```{r}
 par(mfrow=c(1,2)) 
 apply(posterior_dist[,c(1:2)], 2, function(c) acf(c))
 ```
@@ -199,101 +122,27 @@ posterior_dist %>%
   facet_wrap(~variable, ncol = 3, scales = "free_y") +
   theme_minimal()
 
-
-# apply(posterior_dist, 2, function(c) (quantile(c, probs = c(0.025, 0.5, 0.975))))
+apply(posterior_dist, 2, function(c) (quantile(c, probs = c(0.025, 0.5, 0.975))))
 ```
 
-
 ```{r calculate co survival function}
-longest = 120
-sigma_calculator <- function(row, x_vector){
-  exp(sum(row[3:22] * x_vector))
-}
+max_day <- 120
+co_subgroups <- is_data %>% filter(Population == "CO") %>% dummy_co() %>% dplyr::select(-Day) %>% unique()
 
-get_survival_function <- function(dummy_posterior_dist, x_fit){
-  dummy_posterior_dist$sigma <- apply(dummy_posterior_dist, 1, function(r) sigma_calculator(r, x_fit)) 
-  seq(2:longest) %>% 
-    sapply(function(day)(
-      apply(dummy_posterior_dist, 1, function(row) (
-        1 - cdf_calculator(t = day, alpha = row[1], theta = row[2], sigma = row[length(row)])
-        ))
-      )) %>% 
-  as.data.frame()
-}
-
-co_subgroups <- 
-  is_data %>% 
-  filter(Population == "CO") %>% 
-  mutate(
-    intercept = 1,
-    infected = ifelse(Treatment == "Infected", 1, 0),
-    female = ifelse(Sex == "Female", 1, 0),
-    age_14 = ifelse(Age == 14, 1, 0),
-    age_28 = ifelse(Age == 28, 1, 0),
-    age_42 = ifelse(Age == 42, 1, 0),
-    age_56 = ifelse(Age == 56, 1, 0),
-    inf_female = infected*female, 
-    inf_14 = infected*age_14,
-    inf_28 = infected*age_28,
-    inf_42 = infected*age_42,
-    inf_56 = infected*age_56,
-    female_14 = female*age_14,
-    female_28 = female*age_28,
-    female_42 = female*age_42,
-    female_56 = female*age_56,
-    female_inf_14 = female*infected*age_14,
-    female_inf_28 = female*infected*age_28,
-    female_inf_42 = female*infected*age_42,
-    female_inf_56 = female*infected*age_56,
-  ) %>% 
-  dplyr::select(c(intercept, infected, female, age_14, age_28, age_42, age_56,
-                  inf_female, inf_14, inf_28, inf_42, inf_56, female_14, female_28, female_42, female_56,
-                  female_inf_14, female_inf_28, female_inf_42, female_inf_56)) %>% 
-  unique()
-
-get_survival_bounds <- function(data, x_fit){
-  dummy_data = get_survival_function(data, x_fit)
-  apply(dummy_data, 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
-    as.data.frame()
-}
-
-convert_age_back <- function(age_14, age_28, age_42, age_56){
-  if(age_14 == 1) {return(14)}
-  if(age_28 == 1) {return(28)}
-  if(age_42 == 1) {return(42)}
-  if(age_56 == 1) {return(56)}
-  if((age_14==0) && (age_28==0) && (age_42==0) && (age_56==0)) {return(72)}
-}
-
-co_survival_function <- 
-  apply(co_subgroups, 1, function(row) get_survival_bounds(posterior_dist, x_fit = row)) %>% 
+co_survival <- 
+  apply(co_subgroups, 1, 
+        function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>% 
   data.frame() %>% 
-  rbind(Day = rep(c(2:longest), nrow(co_subgroups))) %>% 
-  t() %>% 
-  set_colnames(c("lower","est","upper","Day")) %>% 
-  cbind(
-    co_subgroups[rep(1:nrow(co_subgroups), each = length(c(2:longest))),]
-  ) %>% 
+  add_initial(co_subgroups, max_day = max_day) %>% 
   rowwise() %>% 
   mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
          Sex = ifelse(female == 1, "Female", "Male"),
-         Age = convert_age_back(age_14, age_28, age_42, age_56)) %>% 
-  select(Treatment,Sex,Age,Day, est, lower, upper)
+         Age = convert_age_back2(age_14, age_28, age_42, age_56)) %>% 
+  select(Treatment, Sex, Age, Day, est, lower, upper)
 ```
 
 
 ```{r plot co survival function}
-co_survival_function %>% 
-  filter(est > 0.005) %>% 
-  ggplot(aes(x = Day + as.numeric(as.character(Age)), 
-             linetype = Treatment,
-             group = interaction(Treatment,Sex,Age))) +
-  geom_line(aes(y = est), color = "grey30", size = 0.5) +
-  geom_line(aes(y = lower), color = "grey30", size = 0.5) +
-  geom_line(aes(y = upper), color = "grey30", size = 0.5) +
-  scale_linetype_manual(values = c("Infected" = "solid", "Uninfected" = "dashed")) +
-  facet_grid(Sex~.) +
-  theme_minimal() +
-  labs(x = "Days after spray", y = "Survival function") +
-  xlim(10,100)
+co_survival %>% plot_survival(color = "grey30")
 ```
+
