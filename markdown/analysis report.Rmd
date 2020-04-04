@@ -37,30 +37,23 @@ source("../scripts/functions.R")
 
 ## Raw data
 
-```{r clean raw data}
+```{r import and plot raw data}
 is_data <- readxl::read_excel("../data/IS_data.xlsx") %>% clean_data(cols_to_numeric = c("Day after spray","Deaths"))
-```
-
-```{r plot raw data}
-is_data %>% 
-  get_survival_percent() %>% 
-  plot_survival_percent() +
-  xlim(10, 100)
+is_data %>% get_survival_percent() %>% plot_survival_percent() + xlim(10, 100)
 ```
 
 ## Model {.tabset}
 
 ### ACO
 
-```{r}
-posterior_dist <- read.csv("../data/posterior_aco.csv")[-1,] %>% burn_n_thin_draws(jump = 200, burn_at = 8000)
+```{r thin aco posterior draws}
+posterior_dist <- read.csv("./data/posterior_aco.csv")[-1,] %>% burn_n_thin_draws(jump = 200, burn_at = 8000)
 
 par(mfrow=c(4,3)) 
 apply(posterior_dist, 2, function(c) acf(c))
 ```
 
-
-```{r}
+```{r track aco posterior draws}
 posterior_dist %>% 
   mutate(iter = c(1:nrow(posterior_dist))) %>% 
   reshape2::melt(id.vars = "iter") %>% 
@@ -73,12 +66,12 @@ posterior_dist %>%
 apply(posterior_dist, 2, function(c) (quantile(c, probs = c(0.025, 0.5, 0.975))))
 ```
 
-```{r calculate aco survival function}
+```{r aco survival function}
 max_day <- 47
 aco_subgroups <- is_data %>% filter(Population == "ACO") %>% dummy_aco() %>% dplyr::select(-Day) %>% unique()
 
 aco_survival <- 
-  apply(aco_subgroups, 1, function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>% 
+  apply(aco_subgroups, 1, function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>%
   data.frame() %>% 
   add_initial(aco_subgroups, max_day = max_day) %>% 
   rowwise() %>% 
@@ -86,33 +79,52 @@ aco_survival <-
          Sex = ifelse(female == 1, "Female", "Male"),
          Age = convert_age_back(age_14, age_28)) %>% 
   select(Treatment, Sex, Age, Day, est, lower, upper)
-```
 
-
-```{r plot aco survival function}
 aco_survival %>% plot_survival(color = "brown3")
 ```
 
+```{r aco median residual life}
+aco_median_residual <- 
+  apply(aco_subgroups, 1, function(row) median_residual_calculator(posterior_dist, row)) %>% 
+  residual_intervals_calculator() %>% 
+  t() %>% 
+  set_colnames(c("lower","est","upper")) %>% 
+  cbind(aco_subgroups,.) %>% 
+  rowwise() %>% 
+  mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
+         Sex = ifelse(female == 1, "Female", "Male"),
+         Age = convert_age_back(age_14, age_28)) %>% 
+  select(Treatment, Sex, Age, est, lower, upper)
+
+aco_median_residual %>% 
+  ggplot(aes(x = as.character(Age), y = est, fill = Treatment)) +
+  geom_bar(stat = "identity", position=position_dodge()) +
+  geom_text(aes(label = round(est,2)), vjust = 2.5, size = 3, position = position_dodge(0.9)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.3, color = "grey40", alpha = 0.5,
+                position = position_dodge(0.9)) +
+  facet_grid(~Sex) +
+  scale_fill_brewer(palette="Reds") +
+  theme_minimal() +
+  labs(x = "Age", y = "Median residual life")
+```
 
 
 
 
 ### CO
 
-```{r}
+```{r thin co posterior draws}
 posterior_dist <- read.csv("../data/posterior_co.csv")[-1,] %>% burn_n_thin_draws(jump = 350, burn_at = 1)
 
 par(mfrow=c(1,2)) 
 apply(posterior_dist[,c(1:2)], 2, function(c) acf(c))
-```
 
-```{r}
 par(mfrow=c(4,5)) 
 apply(posterior_dist[,-c(1:2)], 2, function(c) acf(c))
 ```
 
 
-```{r}
+```{r track co posterior draws}
 posterior_dist %>% 
   mutate(iter = c(1:nrow(posterior_dist))) %>% 
   reshape2::melt(id.vars = "iter") %>% 
@@ -122,10 +134,10 @@ posterior_dist %>%
   facet_wrap(~variable, ncol = 3, scales = "free_y") +
   theme_minimal()
 
-apply(posterior_dist, 2, function(c) (quantile(c, probs = c(0.025, 0.5, 0.975))))
+apply(posterior_dist, 2, function(c) (quantile(c, probs = c(0.025, 0.5, 0.975)))) %>% t()
 ```
 
-```{r calculate co survival function}
+```{r co survival function}
 max_day <- 120
 co_subgroups <- is_data %>% filter(Population == "CO") %>% dummy_co() %>% dplyr::select(-Day) %>% unique()
 
@@ -139,10 +151,47 @@ co_survival <-
          Sex = ifelse(female == 1, "Female", "Male"),
          Age = convert_age_back2(age_14, age_28, age_42, age_56)) %>% 
   select(Treatment, Sex, Age, Day, est, lower, upper)
-```
 
-
-```{r plot co survival function}
 co_survival %>% plot_survival(color = "grey30")
 ```
+
+
+```{r co median residual life}
+co_median_residual <- 
+  apply(co_subgroups, 1, function(row) median_residual_calculator(posterior_dist, row)) %>% 
+  residual_intervals_calculator() %>% 
+  t() %>% 
+  set_colnames(c("lower","est","upper")) %>% 
+  cbind(co_subgroups,.) %>% 
+  rowwise() %>% 
+  mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
+         Sex = ifelse(female == 1, "Female", "Male"),
+         Age = convert_age_back2(age_14, age_28, age_42, age_56)) %>% 
+  select(Treatment, Sex, Age, est, lower, upper)
+
+co_median_residual %>% 
+  ggplot(aes(x = as.character(Age), y = est, fill = Treatment)) +
+  geom_bar(stat = "identity", position=position_dodge()) +
+  geom_text(aes(label = round(est,2)), vjust = 2.5, size = 3, position = position_dodge(0.9)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.3, color = "grey40", alpha = 0.5,
+                position = position_dodge(0.9)) +
+  facet_grid(~Sex) +
+  scale_fill_brewer(palette="Greys") +
+  theme_minimal() +
+  labs(x = "Age", y = "Median residual life")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

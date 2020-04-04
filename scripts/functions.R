@@ -161,6 +161,12 @@ cdf_calculator <- function(t, alpha, theta, sigma) {
   (1 - exp(-((t/sigma)^alpha)))^theta
 }
 
+#### median residual life function ------------------------------- #### 
+
+median_residual_life <- function(u, alpha, theta, sigma){
+  sigma * (-log(1-u^(1/theta)))^(1/alpha)
+}
+
 #### dummy categorical covariates ---------------------------------- #### 
 
 dummy_aco <- function(data){
@@ -234,6 +240,21 @@ survival_function_calculator <- function(data, x_fit, max_day){
 survival_interval_calculator <- function(data, x_fit, max_day){
   dummy_data = survival_function_calculator(data, x_fit, max_day)
   apply(dummy_data, 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
+    as.data.frame()
+}
+
+#### calculate median residual life ----------------------------------------- ####
+
+median_residual_calculator <- function(data, x_fit){
+  data$sigma <- apply(data, 1, function(row) sigma_calculator(row, x_fit))
+  apply(data, 1, function(row)  
+    median_residual_life(u = 0.5, alpha = row[1], theta = row[2], sigma = row[length(row)]))
+}
+
+#### calculate median residual intervals ------------------------------------- ####
+
+residual_intervals_calculator <- function(data){
+  apply(data, 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
     as.data.frame()
 }
 
