@@ -147,7 +147,7 @@ coefs_sampler2 <- function(coefs, multiplier){
   MASS::mvrnorm(1, coefs, multiplier*m)
 }
 
-#### burn in and thin posterior draws ----------------------------------------- ####
+#### burn in and thin posterior draws ------------------------------ ####
 
 burn_n_thin_draws <- function(data, jump, burn_at = 10000){
   data_burned <- data[-c(1:burn_at), ]
@@ -161,13 +161,22 @@ cdf_calculator <- function(t, alpha, theta, sigma) {
   (1 - exp(-((t/sigma)^alpha)))^theta
 }
 
-#### median residual life function ------------------------------- #### 
+#### median life function ------------------------------------------ #### 
 
-median_residual_life <- function(u, alpha, theta, sigma){
+median_life <- function(u, alpha, theta, sigma){
   sigma * (-log(1-u^(1/theta)))^(1/alpha)
 }
 
-#### dummy categorical covariates ---------------------------------- #### 
+#### median residual life function  ------------------------------- #### 
+
+median_residual_life <- function(t, u, alpha, theta, sigma){
+  K = (1-u)*(1-cdf_calculator(t, alpha, theta, sigma))
+  term_log = log(1-((1-K)^(1/theta)))
+  (-sigma^alpha*term_log)^(1/alpha) - t
+}
+
+
+#### dummy categorical covariates --------------------------------- #### 
 
 dummy_aco <- function(data){
   data %>% 
@@ -243,17 +252,38 @@ survival_interval_calculator <- function(data, x_fit, max_day){
     as.data.frame()
 }
 
-#### calculate median residual life ----------------------------------------- ####
+#### calculate median residual life -------------------------------------- #### 
 
-median_residual_calculator <- function(data, x_fit){
+median_residual_calculator <- function(data, x_fit, max_day){
+  data$sigma= apply(data, 1, function(row) sigma_calculator(row, x_fit))
+  seq(2, max_day) %>% 
+    sapply(function(day)(
+      apply(data, 1, function(row)(
+        median_residual_life(t = day, u = 0.5, alpha = row[1], theta = row[2], sigma = row[length(row)])
+      ))
+    )) %>% 
+    as.data.frame()
+}
+
+#### calculate the median residual intervals ------------------------- ####
+
+median_residual_interval_calculator <- function(data, x_fit, max_day){
+  dummy_data = median_residual_calculator(data, x_fit, max_day)
+  apply(dummy_data, 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
+    as.data.frame()
+}
+
+#### calculate median life ----------------------------------------- ####
+
+median_calculator <- function(data, x_fit){
   data$sigma <- apply(data, 1, function(row) sigma_calculator(row, x_fit))
   apply(data, 1, function(row)  
     median_residual_life(u = 0.5, alpha = row[1], theta = row[2], sigma = row[length(row)]))
 }
 
-#### calculate median residual intervals ------------------------------------- ####
+#### calculate median intervals ------------------------------------- ####
 
-residual_intervals_calculator <- function(data){
+median_intervals_calculator <- function(data){
   apply(data, 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
     as.data.frame()
 }
@@ -276,7 +306,7 @@ convert_age_back2 <- function(age_14, age_28, age_42, age_56){
 
 #### pack survival function and add initial day survival ----------------- ####
 
-add_initial <- function(data, subgroups, max_day){
+add_survival_initial <- function(data, subgroups, max_day){
   data %>% 
     rbind(Day = rep(c(2:max_day), nrow(subgroups))) %>% 
       t() %>% 
@@ -298,6 +328,20 @@ add_initial <- function(data, subgroups, max_day){
       )
 }
 
+#### pack median residual function and add initial median residual life ----------------- ####
+
+add_median_residual_initial <- function(data, subgroups, max_day){
+  data %>% 
+    rbind(Day = rep(c(2:max_day), nrow(subgroups))) %>% 
+    t() %>% 
+    set_colnames(c("lower","est","upper","Day")) %>% 
+    cbind(
+      subgroups[rep(1:nrow(subgroups), each = length(c(2:max_day))),]
+    ) %>% 
+    filter( (!is.infinite(lower)) & (!is.infinite(upper)) & (!is.infinite(est)))
+}
+
+
 #### plot survival function ---------------------------------------------- ####
 
 plot_survival <- function(data, color){
@@ -315,3 +359,54 @@ plot_survival <- function(data, color){
     labs(x = "Days after spray", y = "Survival function") +
     xlim(10,100)
 }
+
+
+#### plot median residual function ---------------------------------------------- ####
+
+plot_median_residual <- function(data, type){
+  if(type == 1){
+    ggplot(data,
+           aes(x = Day+Age, y = est, ymin = lower, ymax = upper, color = as.factor(Age),
+               group = interaction(Treatment,Sex,Age))) +
+      geom_line() +
+      geom_errorbar() +
+      facet_wrap(Treatment~Sex) +
+      scale_color_jco() +
+      theme_minimal() +
+      labs(x= "Age", y = "Median residual life", color = "Age")
+  }else{
+    ggplot(data,
+           aes(x = Day, y = est, ymin = lower, ymax = upper, color = as.factor(Age),
+               group = interaction(Treatment,Sex,Age))) +
+      geom_line() +
+      geom_errorbar() +
+      facet_wrap(Treatment~Sex) +
+      scale_color_jco() +
+      theme_minimal() +
+      labs(y = "Median residual life", color = "Age")
+  }
+}
+
+
+#### plot median residual slope  ---------------------------------------------- ####
+
+plot_median_residual_slope <- function(data, type){
+  if(type == 1){
+    ggplot(data, aes(x = Day+Age, y = abs(est), color = as.factor(Age),
+               group = interaction(Treatment,Sex,Age))) +
+      geom_line() +
+      scale_color_jco() +
+      facet_wrap(Treatment~Sex) +
+      labs(x= "Age", y = "Slope", color = "Age") + 
+      theme_minimal()
+  }else{
+    ggplot(data, aes(x = Day, y = abs(est), color = as.factor(Age),
+               group = interaction(Treatment,Sex,Age))) +
+      geom_line() +
+      scale_color_jco() +
+      facet_wrap(Treatment~Sex) +
+      labs(y = "Slope", color = "Age") + 
+      theme_minimal()
+  }
+}
+

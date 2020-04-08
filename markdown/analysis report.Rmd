@@ -47,7 +47,7 @@ is_data %>% get_survival_percent() %>% plot_survival_percent() + xlim(10, 100)
 ### ACO
 
 ```{r thin aco posterior draws}
-posterior_dist <- read.csv("./data/posterior_aco.csv")[-1,] %>% burn_n_thin_draws(jump = 200, burn_at = 8000)
+posterior_dist <- read.csv("../data/posterior_aco.csv")[-1,] %>% burn_n_thin_draws(jump = 200, burn_at = 8000)
 
 par(mfrow=c(4,3)) 
 apply(posterior_dist, 2, function(c) acf(c))
@@ -73,7 +73,7 @@ aco_subgroups <- is_data %>% filter(Population == "ACO") %>% dummy_aco() %>% dpl
 aco_survival <- 
   apply(aco_subgroups, 1, function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>%
   data.frame() %>% 
-  add_initial(aco_subgroups, max_day = max_day) %>% 
+  add_survival_initial(aco_subgroups, max_day = max_day) %>% 
   rowwise() %>% 
   mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
          Sex = ifelse(female == 1, "Female", "Male"),
@@ -83,10 +83,10 @@ aco_survival <-
 aco_survival %>% plot_survival(color = "brown3")
 ```
 
-```{r aco median residual life}
-aco_median_residual <- 
-  apply(aco_subgroups, 1, function(row) median_residual_calculator(posterior_dist, row)) %>% 
-  residual_intervals_calculator() %>% 
+```{r aco median life}
+aco_median <- 
+  apply(aco_subgroups, 1, function(row) median_calculator(posterior_dist, row)) %>% 
+  median_intervals_calculator() %>% 
   t() %>% 
   set_colnames(c("lower","est","upper")) %>% 
   cbind(aco_subgroups,.) %>% 
@@ -96,7 +96,7 @@ aco_median_residual <-
          Age = convert_age_back(age_14, age_28)) %>% 
   select(Treatment, Sex, Age, est, lower, upper)
 
-aco_median_residual %>% 
+aco_median %>% 
   ggplot(aes(x = as.character(Age), y = est, fill = Treatment)) +
   geom_bar(stat = "identity", position=position_dodge()) +
   geom_text(aes(label = round(est,2)), vjust = 2.5, size = 3, position = position_dodge(0.9)) +
@@ -105,8 +105,72 @@ aco_median_residual %>%
   facet_grid(~Sex) +
   scale_fill_brewer(palette="Reds") +
   theme_minimal() +
-  labs(x = "Age", y = "Median residual life")
+  labs(x = "Age", y = "Median life")
 ```
+
+```{r aco median residual life}
+max_day <- 46
+aco_subgroups <- is_data %>% filter(Population == "ACO") %>% dummy_aco() %>% dplyr::select(-Day) %>% unique()
+
+aco_median_residual <- 
+  apply(
+    aco_subgroups, 1, 
+    function(row) median_residual_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>%
+  data.frame() %>%
+  add_median_residual_initial(aco_subgroups, max_day = max_day) %>% 
+  rowwise() %>% 
+  mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
+         Sex = ifelse(female == 1, "Female", "Male"),
+         Age = convert_age_back(age_14, age_28)) %>% 
+  select(Treatment, Sex, Age, Day, est, lower, upper) %>% 
+  filter(est >= 1)
+
+aco_median_residual %>% filter(Treatment == "Uninfected") %>% plot_median_residual(type = 1)
+aco_median_residual %>% filter(Treatment == "Infected") %>% plot_median_residual(type = 2)
+```
+
+
+```{r}
+aco_median_slope <- 
+  aco_median_residual %>% 
+  group_by(Treatment,Age,Sex) %>% 
+  mutate(est = c(NA,diff(est)),
+         lower = c(NA,diff(lower)),
+         upper = c(NA,diff(upper))) %>% 
+  na.omit()
+
+aco_median_slope %>% filter(Treatment == "Uninfected") %>% plot_median_residual_slope(type = 2)
+aco_median_slope %>% filter(Treatment == "Infected") %>% plot_median_residual_slope(type = 2)
+```
+
+```{r aco change of scale}
+# age 14 measurement 0.06368858
+exp(-0.608 -0.62447)/exp(1.809 -0.608+0.945-0.62472)
+# age 28 measurement 0.1171852
+exp(-0.608 -0.200)/exp(1.809 -0.608+0.335-0.200)
+# age 42 measurement 1 
+exp(-0.608 - 0)/exp(-0.608)
+```
+
+```{r aco abs scale inf}
+exp(1.809 -0.608+0.945-0.62472)  # 4.578081
+exp(1.809 -0.608+0.335-0.200)    # 3.803798
+exp(-0.608)                      # 0.5444387
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -145,7 +209,7 @@ co_survival <-
   apply(co_subgroups, 1, 
         function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>% 
   data.frame() %>% 
-  add_initial(co_subgroups, max_day = max_day) %>% 
+  add_survival_initial(co_subgroups, max_day = max_day) %>% 
   rowwise() %>% 
   mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
          Sex = ifelse(female == 1, "Female", "Male"),
@@ -156,8 +220,8 @@ co_survival %>% plot_survival(color = "grey30")
 ```
 
 
-```{r co median residual life}
-co_median_residual <- 
+```{r co median life}
+co_median <- 
   apply(co_subgroups, 1, function(row) median_residual_calculator(posterior_dist, row)) %>% 
   residual_intervals_calculator() %>% 
   t() %>% 
@@ -169,7 +233,7 @@ co_median_residual <-
          Age = convert_age_back2(age_14, age_28, age_42, age_56)) %>% 
   select(Treatment, Sex, Age, est, lower, upper)
 
-co_median_residual %>% 
+co_median %>% 
   ggplot(aes(x = as.character(Age), y = est, fill = Treatment)) +
   geom_bar(stat = "identity", position=position_dodge()) +
   geom_text(aes(label = round(est,2)), vjust = 2.5, size = 3, position = position_dodge(0.9)) +
@@ -178,15 +242,26 @@ co_median_residual %>%
   facet_grid(~Sex) +
   scale_fill_brewer(palette="Greys") +
   theme_minimal() +
-  labs(x = "Age", y = "Median residual life")
+  labs(x = "Age", y = "Median life")
 ```
 
 
 
+## Median residual life
+
+### ACO
+
+```{r}
+
+```
 
 
 
+### CO
 
+```{r}
+
+```
 
 
 
