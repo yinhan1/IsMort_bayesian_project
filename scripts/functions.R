@@ -112,7 +112,9 @@ coefs_sampler <- function(coefs, multiplier){
 #### random sampler for log_alpha and log_theta CO -------------------- ####
 
 log_shape_sampler2 <- function(log_alpha, log_theta, multiplier){
-  m = matrix(c(8.864063e-04,-0.0094593231,-0.0094593231,0.1105368735), ncol=2)
+  # m = matrix(c(8.864063e-04,-0.0094593231,-0.0094593231,0.1105368735), ncol=2)
+  # new proposed 2020-04-12
+  m = matrix(c(-2.576053, -0.005930974, -0.005930974, -7.193297), ncol = 2)
   MASS::mvrnorm(1, c(log_alpha, log_theta), multiplier*m)
 }
 
