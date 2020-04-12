@@ -20,3 +20,5 @@ co_burned %>%
 cov(log(co_burned[,1:2]))
 
 cov(co_burned[,-c(1:2)])
+
+
