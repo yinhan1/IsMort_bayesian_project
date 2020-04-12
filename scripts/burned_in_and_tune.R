@@ -1,11 +1,11 @@
 
 
 
-aco_draws <- read_csv('data/posterior_co_trial_2020-04-12.csv')
-aco_burned <- burn_n_thin_draws(aco_draws, jump = 1, burn_at = 1e5)
+co_draws <- read.csv('data/posterior_co_trial_2020-04-12.csv')
+co_burned <- burn_n_thin_draws(co_draws, jump = 1, burn_at = 1e5)
 
 
-aco_burned %>% 
+co_burned %>% 
   rowid_to_column('iteration') %>% 
   # mutate(iteration = ) %>% 
   reshape2::melt(id.vars = "iteration") %>%
@@ -17,12 +17,6 @@ aco_burned %>%
   theme_minimal() +
   theme(legend.position = "none")
 
+cov(log(co_burned[,1:2]))
 
-aco_burned$alpha %>% 
-  var() %>% 
-  log()
-
-log(var(aco_burned$alpha))
-log(var(aco_burned$theta))
-log(cov(aco_burned$alpha, aco_burned$theta))
-
+cov(co_burned[,-c(1:2)])
