@@ -7,23 +7,31 @@ library(kableExtra)
 
 source("./scripts/functions.R")
 
+is_data <- readxl::read_excel("data/IS_data.xlsx") %>% 
+  clean_data(cols_to_numeric = c("Day after spray","Deaths"))
+
 #### ACO =========================== ####
 
 #### step 1: filter out ACO and dummy categorical features ####
 
-is_dummy <- is_data %>% filter(Population == "ACO") %>% dummy_aco()
+is_dummy <- is_data %>% 
+  filter(Population == "ACO") %>% 
+  dummy_aco()
 
 #### step 2: initial values and draws from MH algorithm ####
 
-B <- 5
+B <- 300000
 a1 <- a2 <- 0
 
 outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
 colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
-outcomes[1,] = c(1.8,1.7,1.8,rep(0, ncol(outcomes)-3))
+# outcomes[1,] = c(1.8,1.7,1.8,rep(0, ncol(outcomes)-3))
+
+outcomes[1,] = read_csv('data/posterior_aco.csv') %>% 
+  last() %>% unlist()
 
 #### step 3: for loop of MH algorithm
-
+start_time <- Sys.time()
 for(iter in 2:(B+1)){
   
   #### ---------------------- MH for shape ---------------------- ####
@@ -126,10 +134,11 @@ as.data.frame(outcomes) %>%
 
 #### step 4: save posterior dist and acceptance rate ####
 
-outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
-# write.csv(outcomes, file = "./data/posterior_aco_trial.csv", row.names = FALSE)
-
-
+outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes) %>% 
+  as_tibble()
+write_csv(outcomes, "./data/posterior_aco_trial_2020-04-11.csv")
+end_time <- Sys.time()
+end_time - start_time
 
 #### CO ============================ ####
 
