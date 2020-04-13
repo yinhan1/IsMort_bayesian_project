@@ -3,8 +3,7 @@
 #### ACO -------------------------------- ####
 
 aco_draws <- read.csv('data/posterior_aco_trial_2020-04-11.csv')
-aco_burned <- burn_n_thin_draws(aco_draws, jump = 1, burn_at = 1e3)
-
+aco_burned <- burn_n_thin_draws(aco_draws, jump = 200, burn_at = 3e3)
 
 aco_burned %>% 
   rowid_to_column('iteration') %>% 
