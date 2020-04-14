@@ -308,8 +308,9 @@ is_dummy <- is_data %>%
          pop_aco = ifelse(Population == "ACO", 1, 0),
          con_female = control*female,
          con_aco = control*pop_aco,
-         female_aco = female*pop_aco) %>% 
-  select(Day,intercept, pop_aco, control, female, con_female, con_aco, female_aco)
+         female_aco = female*pop_aco,
+         con_female_aco = control*female*pop_aco) %>% 
+  select(Day,intercept, pop_aco, control, female, con_female, con_aco, female_aco, con_female_aco)
   
 
 #### step 2: initial values and draws from MH algorithm ####
@@ -319,8 +320,9 @@ a1 <- a2 <- 0
 
 outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
 colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
-outcomes[1,] = c(4.841021334,  0.407519394,  3.981028235, -0.728785700,
-                 0.056125101,  0.149153496, -0.004108679, -0.111845422, -0.054667296 )
+outcomes[1,] = c(4.86983567,     0.39150308,     3.98904021,   -0.690019248,
+                 0.001140902,    0.162223351,    0.024151428,   -0.094616469,
+                 -0.091893765,   -0.006197465)
 
 
 #### step 3: for loop of MH algorithm ####
@@ -330,7 +332,7 @@ for(iter in 2:(B+1)){
   # propose new shape
   log_shape_proposed = log_shape_sampler3(log_alpha = log(outcomes[iter-1,1]),
                                          log_theta = log(outcomes[iter-1,2]),
-                                         multiplier = 0.5
+                                         multiplier = 0.1
   )
   loglike = log_likelihood(data = is_dummy,
                            alpha = exp(log_shape_proposed[1]),

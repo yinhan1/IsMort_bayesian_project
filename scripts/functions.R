@@ -166,7 +166,7 @@ coefs_sampler2 <- function(coefs, multiplier){
 #### random sampler for log_alpha and log_theta Control vs Uninfected -------------------- ####
 
 log_shape_sampler3 <- function(log_alpha, log_theta, multiplier){
-  m = matrix(c(0.001085796, -0.001337716, -0.001337716, 0.001934802), ncol = 2)
+  m = matrix(c(0.002809302, -0.001473003, -0.001473003, 0.002899220), ncol = 2)
   MASS::mvrnorm(1, c(log_alpha, log_theta), multiplier*m)
 }
 
@@ -175,13 +175,14 @@ log_shape_sampler3 <- function(log_alpha, log_theta, multiplier){
 coefs_sampler3 <- function(coefs, multiplier){
   m = matrix(
     c(
-      2.352395e-04, -4.678037e-05, -1.840872e-04, -1.416648e-04,  1.435204e-04,  4.439736e-05,  2.535909e-05,
-     -4.678037e-05,  2.344465e-04,  8.308017e-06,  1.098870e-05,  8.918215e-05, -1.370062e-04, -1.393824e-04,
-     -1.840872e-04,  8.308017e-06,  3.748156e-04,  4.387675e-05, -2.443901e-04, -1.786456e-04,  1.208028e-04,
-     -1.416648e-04,  1.098870e-05,  4.387675e-05,  2.129162e-04, -1.260438e-04,  8.088946e-05, -1.146378e-04,
-      1.435204e-04,  8.918215e-05, -2.443901e-04, -1.260438e-04,  3.678938e-04, -2.726152e-05, -1.001764e-04,
-      4.439736e-05, -1.370062e-04, -1.786456e-04,  8.088946e-05, -2.726152e-05,  3.181270e-04, -6.304845e-05,
-      2.535909e-05, -1.393824e-04,  1.208028e-04, -1.146378e-04, -1.001764e-04, -6.304845e-05,  2.778154e-04
+      0.0002875011, -0.0002238994, -0.0002424512, -0.0002853866,  0.0002379977,  0.0002287953,  0.0002735135,  -0.0002389153,
+     -0.0002238994,  0.0004814111,  0.0002440348,  0.0002936916, -0.0002731769, -0.0003596304, -0.0004660404,   0.0003524155,
+     -0.0002424512,  0.0002440348,  0.0004026862,  0.0002488287, -0.0003800377, -0.0003722545, -0.0002385877,   0.0003437202,
+     -0.0002853866,  0.0002936916,  0.0002488287,  0.0004646400, -0.0003982045, -0.0002539445, -0.0004707457,   0.0003990771,
+      0.0002379977, -0.0002731769, -0.0003800377, -0.0003982045,  0.0006823800,  0.0003586515,  0.0003935021,  -0.0006441216,
+      0.0002287953, -0.0003596304, -0.0003722545, -0.0002539445,  0.0003586515,  0.0005806781,  0.0003546247,  -0.0005491987,
+      0.0002735135, -0.0004660404, -0.0002385877, -0.0004707457,  0.0003935021,  0.0003546247,  0.0007410937,  -0.0006045969,
+     -0.0002389153,  0.0003524155,  0.0003437202,  0.0003990771, -0.0006441216, -0.0005491987, -0.0006045969,   0.0010752469
     ),
     ncol = length(coefs)
   )
@@ -202,6 +203,14 @@ cdf_calculator <- function(t, alpha, theta, sigma) {
   (1 - exp(-((t/sigma)^alpha)))^theta
 }
 
+#### pdf of exponentiated weibull dist  ---------------------------- ####
+
+pdf_calculator <- function(t, alpha, theta, sigma) {
+  exp_term = exp(-(t/sigma)^alpha)
+  alpha*theta/sigma * (1-exp_term)^{theta-1} * exp_term * (t/sigma)^(alpha-1)
+}
+
+
 #### median life function ------------------------------------------ #### 
 
 median_life <- function(u, alpha, theta, sigma){
@@ -216,6 +225,11 @@ median_residual_life <- function(t, u, alpha, theta, sigma){
   (-sigma^alpha*term_log)^(1/alpha) - t
 }
 
+#### hazard rate function ---------------------------------------- ####
+
+hazard_rate <- function(t, alpha, theta, sigma){
+  pdf_calculator(t, alpha, theta, sigma) / (1 - cdf_calculator(t, alpha, theta, sigma))
+}
 
 #### dummy categorical covariates --------------------------------- #### 
 
@@ -313,6 +327,36 @@ median_residual_interval_calculator <- function(data, x_fit, max_day){
   apply(dummy_data, 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
     as.data.frame()
 }
+
+#### calculate hazard rate -------------------------------------- #### 
+
+hazard_function_calculator <- function(data, x_fit, max_day){
+  data$sigma <- apply(data, 1, function(r) sigma_calculator(r, x_fit)) 
+  seq(2,max_day) %>% 
+    sapply(function(day)(
+      apply(data, 1, function(row) (
+        hazard_rate(t = day, alpha = row[1], theta = row[2], sigma = row[length(row)])
+      ))
+    )) %>% 
+    as.data.frame()
+}
+
+#### calculate the hazard rate intervals ---------------------------------------- ####
+
+hazard_interval_calculator <- function(data, x_fit, max_day){
+  dummy_data = hazard_function_calculator(data, x_fit, max_day)
+  cols_to_take = apply(dummy_data, 2, function(col) sum(is.finite(col))==nrow(dummy_data))
+  hazard = apply(dummy_data[,cols_to_take], 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
+    as.data.frame() %>% 
+    t() %>% 
+    set_colnames(c("lower","est","upper"))
+  cbind(
+    as.data.frame(x_fit)[rep(1,nrow(hazard)),],
+    Day = c(2:(nrow(hazard)+1)),
+    hazard
+  )
+}
+
 
 #### calculate median life ----------------------------------------- ####
 
