@@ -140,12 +140,13 @@ rbind(
 
 ```{r aco raw data plot}
 raw_aco <- raw_data %>% filter(Treatment!="Control" & Population=="ACO") %>% droplevels()
-raw_aco %>% get_survival_percent() %>% plot_survival_percent2() + facet_grid(~Sex)
+raw_aco %>% get_survival_percent() %>% plot_survival_percent2()
 ```
 
 ### Model
 
 ```{r aco thin draws}
+posterior_dist <- outcomes[(B-4):(B+1),]
 posterior_dist <- read.csv("../data/posterior_aco.csv")[-1,] %>% burn_n_thin_draws(jump = 200, burn_at = 8000)
 # posterior_dist %>%
 #   reshape2::melt() %>%
@@ -175,6 +176,7 @@ dummy_aco <-
     dplyr::select(c(Day, intercept, infected, female, age_14, age_28, inf_female, inf_14, inf_28, female_14, female_28))
 ```
 
+
 ```{r aco survival function}
 max_day <- 46
 subgroups_aco <- dummy_aco %>% dplyr::select(-Day) %>% unique()
@@ -190,7 +192,7 @@ survival_aco <-
          Population = "ACO") %>% 
   select(Treatment, Sex, Age, Population, Day, est, lower, upper)
 
-survival_aco %>% plot_survival_function2() + facet_grid(~Sex)
+survival_aco %>% plot_survival_function2()
 ```
 
 
@@ -319,7 +321,8 @@ raw_co %>% get_survival_percent() %>% plot_survival_percent2() + facet_grid(~Sex
 ### Model
 
 ```{r aco thin draws}
-  posterior_dist <- read.csv("../data/posterior_co.csv")[-1,] %>% burn_n_thin_draws(jump = 350, burn_at = 1)
+# posterior_dist <- read.csv("./data/posterior_co_trials_recent_run.csv") %>% burn_n_thin_draws(jump = 350, burn_at = 1)
+posterior_dist <- read.csv("./data/posterior_co.csv")[-1,] %>% burn_n_thin_draws(jump = 350, burn_at = 1)
 # posterior_dist %>%
 #   reshape2::melt() %>%
 #   ggplot(aes(x = value)) +
@@ -377,10 +380,10 @@ survival_co <-
 
 survival_co %>% plot_survival_function2() + facet_grid(~Sex)
 
-survival_co %>% 
-  ggplot(aes(x = Day, y = est, linetype = Treatment, color = Sex)) +
-  geom_line() +
-  facet_grid(~paste("Age", Age)) +
+# survival_co %>% 
+#   ggplot(aes(x = Day, y = est, linetype = Treatment, color = Sex)) +
+#   geom_line() +
+#   facet_grid(~paste("Age", Age)) +
 ```
 
 

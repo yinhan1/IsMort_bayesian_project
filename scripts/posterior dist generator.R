@@ -7,38 +7,32 @@ library(kableExtra)
 
 source("./scripts/functions.R")
 
-is_data <- readxl::read_excel("data/IS_data.xlsx") %>% 
-  clean_data(cols_to_numeric = c("Day after spray","Deaths"))
+is_data <- readxl::read_excel("data/IS_data.xlsx") %>% clean_data(cols_to_numeric = c("Day after spray","Deaths"))
 
-#### ACO =========================== ####
+#### ACO =========================================== ####
 
 #### step 1: filter out ACO and dummy categorical features ####
 
-is_dummy <- is_data %>% 
-  filter(Population == "ACO") %>% 
-  dummy_aco()
+is_dummy <- is_data %>% filter(Population == "ACO") %>% convert_to_death_status() %>% dummy_aco() 
 
 #### step 2: initial values and draws from MH algorithm ####
 
-B <- 580000
+B <- 480000
 a1 <- a2 <- 0
 
 outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
 colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
 # outcomes[1,] = c(1.8,1.7,1.8,rep(0, ncol(outcomes)-3))
-outcomes[1,] = c(2.5914670,  0.5854879,  2.6637735, -0.6239139,  0.3602530, 
-                 0.6196093,  0.3297628,  0.1013567, -0.2274719, -0.5972502, 
-                 -0.2266725, -0.4520143)
+outcomes[1,] = c(1.96, 1.7, 1.8, -0.556, 0.0695, 0.971, 0.373, 0.00916, -0.659, -0.257, 0.0707, -0.0732)
 
 #### step 3: for loop of MH algorithm
 start_time <- Sys.time()
 for(iter in 2:(B+1)){
-  
   #### ---------------------- MH for shape ---------------------- ####
   # propose new shape
   log_shape_proposed = log_shape_sampler(log_alpha = log(outcomes[iter-1,1]),
                                          log_theta = log(outcomes[iter-1,2]),
-                                         multiplier = 0.5
+                                         multiplier = 0.1
   )
   loglike = log_likelihood(data = is_dummy,
                            alpha = exp(log_shape_proposed[1]),
@@ -80,7 +74,7 @@ for(iter in 2:(B+1)){
   #### ---------------------- MH for scale/coefs ---------------------- ####
   # propose new coefs
   coefs_proposed = coefs_sampler(coefs = outcomes[iter-1,3:ncol(outcomes)], 
-                                 multiplier = 0.5)
+                                 multiplier = 0.1)
   loglike = log_likelihood(data = is_dummy,
                            alpha = outcomes[iter,1],
                            theta = outcomes[iter,2],
@@ -136,15 +130,12 @@ coda::effectiveSize(outcomes)
 
 #### step 4: save posterior dist and acceptance rate ####
 
-outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes) %>% 
-  as_tibble()
+outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes) %>% as_tibble()
+# write_csv(outcomes, "./data/posterior_aco_trial_2020-04-14.csv")
+end_time <- Sys.time()
+end_time - start_time
 
-
-# write_csv(outcomes, "./data/posterior_aco_trial_2020-04-12.csv")
-# end_time <- Sys.time()
-# end_time - start_time
-
-#### CO ============================ ####
+#### CO ============================================ ####
 
 #### step 1: filter out CO and dummy categorical features ####
 
@@ -286,7 +277,7 @@ outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
 write.csv(outcomes, file = "./data/posterior_co_trials_next_500k.csv", row.names = FALSE)
 
 
-#### Control vs Uninfected ============ ####
+#### Control vs Uninfected ================================ ####
 
 cols_to_numeric = c("Day after spray","Deaths")
 is_data <- readxl::read_excel("data/IS_data.xlsx") %>% 
