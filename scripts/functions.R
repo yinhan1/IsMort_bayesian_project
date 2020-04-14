@@ -9,7 +9,7 @@ clean_data <- function(data, cols_to_numeric){
     mutate_all(function(x) as.factor(x)) %>% 
     mutate_at(cols_to_numeric, function(x) as.numeric(as.character(x))) %>% 
     mutate(Sex = recode(Sex, "F" = "Female", "M" = "Male")) %>% 
-    filter(`Day after spray` != 1 & Treatment != "Control") %>% 
+    filter(`Day after spray` != 1) %>% 
     droplevels() %>% 
     setnames(old = c("Age at spray", "Day after spray"),
              new = c("Age","Day"))
@@ -42,28 +42,92 @@ get_survival_percent <- function(data, cut_off = 0.005){
       data_percent %>% 
         select(-c(Percent,Day)) %>% 
         unique() %>% 
-        mutate(Day = 0, Percent = 1)
+        mutate(Day = 1, Percent = 1)
     ) %>% 
     filter(Percent > cut_off)
 } 
 
-## plot survival percent 
+## plot survival percent -- control
 plot_survival_percent <- function(data){
   data %>% 
-  mutate(tag = paste(Population, Sex)) %>% 
-    ggplot(aes(x = Day + as.numeric(as.character(Age)),
-               y = Percent*100, 
-               group = interaction(Population,Treatment,Sex,Age),
-               color = Population, 
-               linetype = Treatment)) +
-    geom_line() +
-    facet_grid(Sex~Population) +
-    scale_color_manual(values = c("ACO" = "brown3", "CO" = "grey30")) +
-    scale_linetype_manual(values = c("Infected" = "solid", "Uninfected" = "dashed")) +
+    mutate(tag = paste(Treatment, Population, Sex)) %>% 
+    ggplot(aes(x = Day, y = Percent*100, color = tag, linetype = tag)) +
+    geom_line(size = 1.2) +
+    scale_color_manual(
+      values = c(
+        "Uninfected ACO Female" = "brown3",
+        "Infected ACO Female" = "brown3",
+        "Control ACO Female" = "brown3",
+        "Uninfected ACO Male" = "brown3",
+        "Infected ACO Male" = "brown3",
+        "Control ACO Male" = "brown3",
+        "Uninfected CO Female" = "grey30",
+        "Infected CO Female" = "grey30",
+        "Control CO Female" = "grey30",
+        "Uninfected CO Male" = "grey30",
+        "Infected CO Male" = "grey30",
+        "Control CO Male" = "grey30"
+      )) +
+    scale_linetype_manual(
+      values = c(
+        "Uninfected ACO Female" = "dashed",
+        "Infected ACO Female" = "solid",
+        "Control ACO Female" = "dotted",
+        "Uninfected ACO Male" = "dashed",
+        "Infected ACO Male" = "solid",
+        "Control ACO Male" = "dotted",
+        "Uninfected CO Female" = "dashed",
+        "Infected CO Female" = "solid",
+        "Control CO Female" = "dotted",
+        "Uninfected CO Male" = "dashed",
+        "Infected CO Male" = "solid",
+        "Control CO Male" = "dotted"
+      )) +
     theme_minimal() +
-    ylim(0, 107) +
-    labs(x = "Days after spray", y = "Survival percent (%)")
+    labs(x = "Days after spray", y = "Survival percent (%)", color = "", linetype = "")
 }
+
+## plot survival percent -- aco
+plot_survival_percent2 <- function(data){
+  data %>% 
+    mutate(tag = paste(Treatment, Population, Sex)) %>% 
+    ggplot(aes(x = Day + as.numeric(as.character(Age)), y = Percent*100, color = tag, linetype = tag, 
+               group = paste(Treatment, Population, Sex, Age))) +
+    geom_line(size = 1.2) +
+    scale_color_manual(
+      values = c(
+        "Uninfected ACO Female" = "brown3",
+        "Infected ACO Female" = "brown3",
+        "Control ACO Female" = "brown3",
+        "Uninfected ACO Male" = "brown3",
+        "Infected ACO Male" = "brown3",
+        "Control ACO Male" = "brown3",
+        "Uninfected CO Female" = "grey30",
+        "Infected CO Female" = "grey30",
+        "Control CO Female" = "grey30",
+        "Uninfected CO Male" = "grey30",
+        "Infected CO Male" = "grey30",
+        "Control CO Male" = "grey30"
+      )) +
+    scale_linetype_manual(
+      values = c(
+        "Uninfected ACO Female" = "dashed",
+        "Infected ACO Female" = "solid",
+        "Control ACO Female" = "dotted",
+        "Uninfected ACO Male" = "dashed",
+        "Infected ACO Male" = "solid",
+        "Control ACO Male" = "dotted",
+        "Uninfected CO Female" = "dashed",
+        "Infected CO Female" = "solid",
+        "Control CO Female" = "dotted",
+        "Uninfected CO Male" = "dashed",
+        "Infected CO Male" = "solid",
+        "Control CO Male" = "dotted"
+      )) +
+    theme_minimal() +
+    labs(x = "Days after spray", y = "Survival percent (%)", color = "", linetype = "")
+}
+
 
 #### MH ratio of posterior  ------------------------------------- ####
 
@@ -330,7 +394,7 @@ median_residual_interval_calculator <- function(data, x_fit, max_day){
 
 #### calculate hazard rate -------------------------------------- #### 
 
-hazard_function_calculator <- function(data, x_fit, max_day){
+hazard_rate_calculator <- function(data, x_fit, max_day){
   data$sigma <- apply(data, 1, function(r) sigma_calculator(r, x_fit)) 
   seq(2,max_day) %>% 
     sapply(function(day)(
@@ -341,20 +405,21 @@ hazard_function_calculator <- function(data, x_fit, max_day){
     as.data.frame()
 }
 
-#### calculate the hazard rate intervals ---------------------------------------- ####
+#### calculate the hazard ratio ---------------------------------------- ####
 
-hazard_interval_calculator <- function(data, x_fit, max_day){
-  dummy_data = hazard_function_calculator(data, x_fit, max_day)
-  cols_to_take = apply(dummy_data, 2, function(col) sum(is.finite(col))==nrow(dummy_data))
-  hazard = apply(dummy_data[,cols_to_take], 2, function(col) quantile(col, probs = c(0.025, 0.5, 0.975)) ) %>% 
-    as.data.frame() %>% 
-    t() %>% 
-    set_colnames(c("lower","est","upper"))
+hazard_ratio_calculator <- function(s1, s2){
+  d1 = hazard_function_calculator(posterior_dist, s1, max_day)
+  d2 = hazard_function_calculator(posterior_dist, s2, max_day)
+  
+  d1[sapply(d1, is.infinite)] <- NA
+  d2[sapply(d2, is.infinite)] <- NA
+  
   cbind(
-    as.data.frame(x_fit)[rep(1,nrow(hazard)),],
-    Day = c(2:(nrow(hazard)+1)),
-    hazard
-  )
+    Day = c(2:max_day),
+    t(apply(d1/d2, 2, function(col) quantile(col, probs = c(0.025,0.5,0.975), na.rm = TRUE)))
+  ) %>% 
+    set_colnames(c("Day","lower","est","upper")) %>% 
+    na.omit()
 }
 
 
@@ -429,22 +494,141 @@ add_median_residual_initial <- function(data, subgroups, max_day){
 
 #### plot survival function ---------------------------------------------- ####
 
-plot_survival <- function(data, color){
+## control
+plot_survival_function <- function(data){
   data %>% 
     filter(est > 0.007) %>% 
-    ggplot(aes(x = Day + Age, 
-               linetype = Treatment,
-               group = interaction(Treatment,Sex,Age))) +
-    geom_line(aes(y = est), color = color, size = 0.5) +
-    geom_line(aes(y = lower), color = color, size = 0.5) +
-    geom_line(aes(y = upper), color = color, size = 0.5) +
-    scale_linetype_manual(values = c("Infected" = "solid", "Uninfected" = "dashed")) +
-    facet_grid(Sex~.) +
+    mutate(tag = paste(Treatment, Population, Sex)) %>% 
+    ggplot(aes(x = Day + Age, y = est, color = tag,  ymin = lower, ymax = upper)) +
+    geom_errorbar(size = 0.5) +
+    geom_line(aes(linetype = tag), size = 1.2) +
+    scale_color_manual(
+      values = c(
+        "Uninfected ACO Female" = "brown3",
+        "Infected ACO Female" = "brown3",
+        "Control ACO Female" = "brown3",
+        "Uninfected ACO Male" = "brown3",
+        "Infected ACO Male" = "brown3",
+        "Control ACO Male" = "brown3",
+        "Uninfected CO Female" = "grey30",
+        "Infected CO Female" = "grey30",
+        "Control CO Female" = "grey30",
+        "Uninfected CO Male" = "grey30",
+        "Infected CO Male" = "grey30",
+        "Control CO Male" = "grey30"
+      )) +
+    scale_linetype_manual(
+      values = c(
+        "Uninfected ACO Female" = "dashed",
+        "Infected ACO Female" = "solid",
+        "Control ACO Female" = "dotted",
+        "Uninfected ACO Male" = "dashed",
+        "Infected ACO Male" = "solid",
+        "Control ACO Male" = "dotted",
+        "Uninfected CO Female" = "dashed",
+        "Infected CO Female" = "solid",
+        "Control CO Female" = "dotted",
+        "Uninfected CO Male" = "dashed",
+        "Infected CO Male" = "solid",
+        "Control CO Male" = "dotted"
+      )) +
     theme_minimal() +
-    labs(x = "Days after spray", y = "Survival function") +
-    xlim(10,100)
+    labs(x = "Days after spray", y = "Survival function", color = "", linetype = "")
 }
 
+## aco
+plot_survival_function2 <- function(data){
+  data %>% 
+    filter(est > 0.007) %>% 
+    mutate(tag = paste(Treatment, Population, Sex)) %>% 
+    ggplot(aes(x = Day + as.numeric(as.character(Age)), y = est, ymin = lower, ymax = upper, color = tag, linetype = tag,
+               group = paste(Treatment, Population, Sex, Age))) +
+    geom_errorbar(size = 0.5, alpha = 0.8) +
+    geom_line(size = 0.5) +
+    scale_color_manual(
+      values = c(
+        "Uninfected ACO Female" = "brown3",
+        "Infected ACO Female" = "brown3",
+        "Control ACO Female" = "brown3",
+        "Uninfected ACO Male" = "brown3",
+        "Infected ACO Male" = "brown3",
+        "Control ACO Male" = "brown3",
+        "Uninfected CO Female" = "grey30",
+        "Infected CO Female" = "grey30",
+        "Control CO Female" = "grey30",
+        "Uninfected CO Male" = "grey30",
+        "Infected CO Male" = "grey30",
+        "Control CO Male" = "grey30"
+      )) +
+    scale_linetype_manual(
+      values = c(
+        "Uninfected ACO Female" = "dashed",
+        "Infected ACO Female" = "solid",
+        "Control ACO Female" = "dotted",
+        "Uninfected ACO Male" = "dashed",
+        "Infected ACO Male" = "solid",
+        "Control ACO Male" = "dotted",
+        "Uninfected CO Female" = "dashed",
+        "Infected CO Female" = "solid",
+        "Control CO Female" = "dotted",
+        "Uninfected CO Male" = "dashed",
+        "Infected CO Male" = "solid",
+        "Control CO Male" = "dotted"
+      )) +
+    theme_minimal() +
+    labs(x = "Days after spray", y = "Survival function", color = "", linetype = "")
+}
+
+
+#### plot hazard ratio  ---------------------------------------------- ####
+
+# control
+plot_hazard_ratio <- function(data){
+  data %>% 
+    ggplot(aes(x = Day, y = est, color = tag, linetype = tag, ymin = lower, ymax = upper)) +
+    geom_line(size = 1.2) +
+    geom_errorbar(size = 0.7, alpha = 0.5) +
+    scale_color_manual(
+      values = c(
+        "ACO Female" = "brown3",
+        "ACO Male" = "brown3",
+        "CO Female" = "grey30",
+        "CO Male" = "grey30"
+      )) +
+    scale_linetype_manual(
+      values = c(
+        "ACO Female" = "dashed",
+        "ACO Male" = "dashed",
+        "CO Female" = "solid",
+        "CO Male" = "solid"
+      )) +
+    theme_minimal() +
+    labs(x = "Days after spray", y = "Hazard ratio", color = "", linetype = "")
+}
+
+# aco
+plot_hazard_ratio <- function(data){
+  data %>% 
+    ggplot(aes(x = Day, y = est, color = tag, linetype = tag, ymin = lower, ymax = upper)) +
+    geom_line(size = 1.2) +
+    geom_errorbar(size = 0.7, alpha = 0.5) +
+    scale_color_manual(
+      values = c(
+        "ACO Female" = "brown3",
+        "ACO Male" = "brown3",
+        "CO Female" = "grey30",
+        "CO Male" = "grey30"
+      )) +
+    scale_linetype_manual(
+      values = c(
+        "ACO Female" = "dashed",
+        "ACO Male" = "dashed",
+        "CO Female" = "solid",
+        "CO Male" = "solid"
+      )) +
+    theme_minimal() +
+    labs(x = "Days after spray", y = "Hazard ratio", color = "", linetype = "")
+}
 
 #### plot median residual function ---------------------------------------------- ####
 
