@@ -44,14 +44,30 @@ raw_data <- readxl::read_excel("../data/IS_data.xlsx") %>% clean_data(c("Day aft
 ```{r control raw data plot}
 raw_control <- raw_data %>% filter(Age==14 & Treatment!="Infected") %>% droplevels()
 raw_control %>% get_survival_percent() %>% plot_survival_percent() + facet_grid(~Sex)
+
+raw_control %>%
+  group_by(Population, Treatment, Sex,Day) %>% 
+    summarise(Deaths = sum(Deaths)) %>% 
+    group_by(Population, Treatment,Sex) %>% 
+    mutate(Total = sum(Deaths),
+           Deaths = cumsum(Deaths)) %>% 
+    ungroup() %>% 
+    mutate(Percent = 1 - Deaths/Total) %>% 
+    select(-c(Total,Deaths)) %>% 
+  ggplot(aes(x=Day, y=Percent, linetype = Sex,
+             color = interaction(Treatment,Population),
+             group = interaction(Treatment,Population,Sex))) +
+  geom_line() +
+  geom_point(size = 0.7)+
+  facet_grid(~Sex)
 ```
 
 ### Model 
 
 ```{r control thin draws}
-posterior_dist <- read.csv("../data/posterior_control_2020-04-13.csv") %>% burn_n_thin_draws(jump = 80, burn_at = 1)
-# posterior_dist %>% 
-#   reshape2::melt() %>% 
+posterior_dist <- read.csv("../data/posterior_control_2020-04-14.csv") %>% burn_n_thin_draws(jump = 220, burn_at = 1)
+# posterior_dist %>%
+#   reshape2::melt() %>%
 #   ggplot(aes(x = value)) +
 #   geom_density() +
 #   facet_wrap(~variable, scales = "free", ncol = 3)
@@ -67,12 +83,12 @@ dummy_control <-
   mutate(intercept = 1,
          control = ifelse(Treatment=="Control", 1, 0),
          female = ifelse(Sex=="Female", 1, 0),
-         pop_aco = ifelse(Population == "ACO", 1, 0),
-         con_female = control*female,
-         con_aco = control*pop_aco,
-         female_aco = female*pop_aco,
-         con_female_aco = control*female*pop_aco) %>% 
-  select(Day, intercept, pop_aco, control, female, con_female, con_aco, female_aco, con_female_aco)
+         aco = ifelse(Population == "ACO", 1, 0),
+         control_female = control*female,
+         control_aco = control*aco,
+         female_aco = female*aco,
+         control_f_aco = control*female*aco) %>% 
+  select(Day,intercept,control,female,aco,control_female,control_aco,female_aco,control_f_aco)
 ```
 
 ```{r control survival function}
@@ -86,37 +102,49 @@ survival_control <-
   rowwise() %>% 
   mutate(Treatment = ifelse(control == 1, "Control", "Uninfected"),
          Sex = ifelse(female == 1, "Female", "Male"),
-         Population = ifelse(pop_aco == 1, "ACO", "CO"),
+         Population = ifelse(aco == 1, "ACO", "CO"),
          Age = 14) %>% 
   select(Treatment, Sex, Population, Age, Day, est, lower, upper)
 
 survival_control %>% plot_survival_function() + facet_grid(~Sex)
+
+
+survival_control %>% 
+  ggplot(aes(x=Day, y=est, linetype = Sex,
+             color = interaction(Treatment,Population),
+             group = interaction(Treatment,Population,Sex))) +
+  geom_line() +
+  facet_grid(~Sex)
 ```
 
 
 ```{r control hazard ratio}
 aco_female = 
   hazard_ratio_calculator(
-    s1 = subgroups_control %>% filter(pop_aco==1 & female==1 & control==1), 
-    s2 = subgroups_control %>% filter(pop_aco==1 & female==1 & control==0)
+    data = posterior_dist, max_day = max_day,
+    s1 = subgroups_control %>% filter(aco==1 & female==1 & control==1), 
+    s2 = subgroups_control %>% filter(aco==1 & female==1 & control==0)
 ) %>% as.data.frame() %>% mutate(tag = "ACO Female", Sex = "Female")
 
 aco_male = 
   hazard_ratio_calculator(
-    s1 = subgroups_control %>% filter(pop_aco==1 & female==0 & control==1), 
-    s2 = subgroups_control %>% filter(pop_aco==1 & female==0 & control==0)
+    data = posterior_dist, max_day = max_day,
+    s1 = subgroups_control %>% filter(aco==1 & female==0 & control==1), 
+    s2 = subgroups_control %>% filter(aco==1 & female==0 & control==0)
 ) %>% as.data.frame() %>% mutate(tag = "ACO Male", Sex = "Male")
 
 co_female = 
   hazard_ratio_calculator(
-    s1 = subgroups_control %>% filter(pop_aco==0 & female==1 & control==1), 
-    s2 = subgroups_control %>% filter(pop_aco==0 & female==1 & control==0)
+    data = posterior_dist, max_day = max_day,
+    s1 = subgroups_control %>% filter(aco==0 & female==1 & control==1), 
+    s2 = subgroups_control %>% filter(aco==0 & female==1 & control==0)
 ) %>% as.data.frame() %>% mutate(tag = "CO Female", Sex = "Female")
 
 co_male = 
   hazard_ratio_calculator(
-    s1 = subgroups_control %>% filter(pop_aco==0 & female==0 & control==1), 
-    s2 = subgroups_control %>% filter(pop_aco==0 & female==0 & control==0)
+    data = posterior_dist, max_day = max_day,
+    s1 = subgroups_control %>% filter(aco==0 & female==0 & control==1), 
+    s2 = subgroups_control %>% filter(aco==0 & female==0 & control==0)
 ) %>% as.data.frame() %>% mutate(tag = "CO Male", Sex = "Male")
 
 cut_off = 10
@@ -146,8 +174,7 @@ raw_aco %>% get_survival_percent() %>% plot_survival_percent2()
 ### Model
 
 ```{r aco thin draws}
-posterior_dist <- outcomes[(B-4):(B+1),]
-posterior_dist <- read.csv("../data/posterior_aco.csv")[-1,] %>% burn_n_thin_draws(jump = 200, burn_at = 8000)
+posterior_dist <- read.csv("../data/posterior_aco_2020-04-14.csv")[-1,] %>% burn_n_thin_draws(jump = 260, burn_at = 1)
 # posterior_dist %>%
 #   reshape2::melt() %>%
 #   ggplot(aes(x = value)) +
@@ -200,42 +227,48 @@ survival_aco %>% plot_survival_function2()
 ```{r aco hazard ratio}
 unf_14 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_aco %>% filter(infected==0 & age_14==1 & female==1), 
     s2 = subgroups_aco %>% filter(infected==0 & age_14==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 14", Age = 14, Treatment = "Uninfected")
 
 inf_14 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_aco %>% filter(infected==1 & age_14==1 & female==1), 
     s2 = subgroups_aco %>% filter(infected==1 & age_14==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 14", Age = 14, Treatment = "Infected")
 
 unf_28 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_aco %>% filter(infected==0 & age_28==1 & female==1), 
     s2 = subgroups_aco %>% filter(infected==0 & age_28==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 28", Age = 28, Treatment = "Uninfected")
 
 inf_28 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_aco %>% filter(infected==1 & age_28==1 & female==1), 
     s2 = subgroups_aco %>% filter(infected==1 & age_28==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 28", Age = 28, Treatment = "Infected")
 
 unf_42 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_aco %>% filter(infected==0 & age_14==0 & age_28==0 & female==1), 
     s2 = subgroups_aco %>% filter(infected==0 & age_14==0 & age_28==0 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 42", Age = 42, Treatment = "Uninfected")
 
 inf_42 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_aco %>% filter(infected==1 & age_14==0 & age_28==0 & female==1), 
     s2 = subgroups_aco %>% filter(infected==1 & age_14==0 & age_28==0 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 42", Age = 42, Treatment = "Infected")
 
 
-cut_off = 8
+cut_off = 6
 rbind(
   unf_14[-c((nrow(unf_14)-cut_off):nrow(unf_14)),], 
   inf_14[-c((nrow(inf_14)-cut_off):nrow(inf_14)),], 
@@ -248,7 +281,7 @@ rbind(
   geom_line(size = 1.2) +
   geom_errorbar(size = 0.7, alpha = 0.5) +
   facet_grid(~paste("Age", Age)) +
-  geom_hline(yintercept = 1, linetype ="dashed", color = "brown3") +
+  geom_hline(yintercept = 1, linetype ="dashed") +
   labs(x = "Days after spray", y = "Hazard ratio", color = "") +
   theme_minimal()
 ```
@@ -306,23 +339,20 @@ exp(-0.608)                      # 0.5444387
 
 
 
-### CO {.tabset}
-
-
-## ACO {.tabset}
+## CO {.tabset}
 
 ### Raw data
 
-```{r aco raw data plot}
+```{r co raw data plot}
 raw_co <- raw_data %>% filter(Treatment!="Control" & Population=="CO") %>% droplevels()
 raw_co %>% get_survival_percent() %>% plot_survival_percent2() + facet_grid(~Sex)
 ```
 
 ### Model
 
-```{r aco thin draws}
+```{r co thin draws}
 # posterior_dist <- read.csv("./data/posterior_co_trials_recent_run.csv") %>% burn_n_thin_draws(jump = 350, burn_at = 1)
-posterior_dist <- read.csv("./data/posterior_co.csv")[-1,] %>% burn_n_thin_draws(jump = 350, burn_at = 1)
+posterior_dist <- read.csv("../data/posterior_co_2020-04-14.csv")[-1,] %>% burn_n_thin_draws(jump = 350, burn_at = 1)
 # posterior_dist %>%
 #   reshape2::melt() %>%
 #   ggplot(aes(x = value)) +
@@ -379,11 +409,7 @@ survival_co <-
   select(Treatment, Sex, Age, Population, Day, est, lower, upper)
 
 survival_co %>% plot_survival_function2() + facet_grid(~Sex)
-
-# survival_co %>% 
-#   ggplot(aes(x = Day, y = est, linetype = Treatment, color = Sex)) +
-#   geom_line() +
-#   facet_grid(~paste("Age", Age)) +
+survival_co %>% plot_survival_function2() + facet_grid(~paste("Age",Age))
 ```
 
 
@@ -391,66 +417,73 @@ survival_co %>% plot_survival_function2() + facet_grid(~Sex)
 ```{r co hazard ratio}
 unf_14 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==0 & age_14==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==0 & age_14==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 14", Age = 14, Treatment = "Uninfected ")
 
 inf_14 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==1 & age_14==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==1 & age_14==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 14", Age = 14, Treatment = "Infected ")
 
 unf_28 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==0 & age_28==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==0 & age_28==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 28", Age = 28, Treatment = "Uninfected ")
 
 inf_28 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==1 & age_28==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==1 & age_28==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 28", Age = 28, Treatment = "Infected ")
 
 unf_42 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==0 & age_42==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==0 & age_42==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 42", Age = 42, Treatment = "Uninfected ")
 
 inf_42 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==1 & age_42==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==1 & age_42==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 42", Age = 42, Treatment = "Infected ")
 
 unf_56 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==0 & age_56==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==0 & age_56==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 56", Age = 56, Treatment = "Uninfected ")
 
 inf_56 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==1 & age_56==1 & female==1), 
     s2 = subgroups_co %>% filter(infected==1 & age_56==1 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 56", Age = 56, Treatment = "Infected ")
 
 unf_70 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==0 & (age_14+age_28+age_42+age_56)==0 & female==1), 
     s2 = subgroups_co %>% filter(infected==0 & (age_14+age_28+age_42+age_56)==0 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Uninfected 70", Age = 70, Treatment = "Uninfected ")
 
 inf_70 = 
   hazard_ratio_calculator(
+    data = posterior_dist, max_day = max_day,
     s1 = subgroups_co %>% filter(infected==1 & (age_14+age_28+age_42+age_56)==0 & female==1), 
     s2 = subgroups_co %>% filter(infected==1 & (age_14+age_28+age_42+age_56)==0 & female==0)
 ) %>% as.data.frame() %>% mutate(tag = "Infected 70", Age = 70, Treatment = "Infected ")
-
-
-
 
 cut_off = 30
 rbind(
@@ -468,7 +501,7 @@ rbind(
   ggplot(aes(x = Day, y = est, color = Treatment, ymin = lower, ymax = upper, group = tag)) +
   geom_line(size = 1.2) +
   geom_errorbar(size = 0.7, alpha = 0.5) +
-  facet_wrap(~paste("Age", Age)) +
+  facet_wrap(~paste("Age", Age), nrow = 1) +
   geom_hline(yintercept = 1, linetype ="dashed") +
   labs(x = "Days after spray", y = "Hazard ratio", color = "") +
   theme_minimal()
