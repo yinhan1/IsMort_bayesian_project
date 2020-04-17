@@ -680,3 +680,20 @@ plot_median_residual_slope <- function(data, type){
   }
 }
 
+
+#### calculate immunity measurement ------------------ ####
+
+get_change_on_sigma <- function(data, s1, s2){
+  apply(posterior_dist, 1, function(row) 
+     {
+      sigma_inf = sigma_calculator(row,s1)
+      sigma_unf = sigma_calculator(row,s2)
+      (sigma_inf / sigma_unf) / sigma_unf 
+     }
+    ) %>% 
+    quantile(probs = c(0.025, 0.5, 0.975)) %>% 
+    t() %>% 
+    as.data.frame()
+}
+
+
