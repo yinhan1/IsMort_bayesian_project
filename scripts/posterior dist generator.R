@@ -14,7 +14,9 @@ is_data <- readxl::read_excel("data/IS_data.xlsx") %>% clean_data(cols_to_numeri
 
 #### step 1: filter out ACO and dummy categorical features ####
 
-is_dummy <- is_data %>% filter(Population == "ACO" & Treatment != "Control") %>% convert_to_death_status() %>% dummy_aco(.) 
+is_dummy <- is_data %>% 
+  filter(Population == "ACO" & Treatment != "Control") %>% 
+  convert_to_death_status() %>% dummy_aco(.) 
 
 #### step 2: initial values and draws from MH algorithm ####
 
@@ -153,17 +155,11 @@ is_dummy <- is_data %>%
 
 #### step 2: initial values and draws from MH algorithm ####
 
-B <- 5000
+B <- 50000
 a1 <- a2 <- 0
 
 outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
-# colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
-
-outcomes[1,] <- c(
-  1.097296367,   4.953922497,   1.209283349,  -0.482228059,   0.025895856,   1.832793248,   1.453513721,
-  0.735576928,   0.250055192,  -0.015691754,  -0.884285239,  -0.906604992,   -0.521759576,  -0.309321503,
-  0.158424317,   0.096360510,   0.325413932,   0.152977188,   0.064844156,   0.006385447,  -0.182813001,
-  0.042295215 )
+colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
 
 
 # extract from posterior_co.csv
@@ -443,7 +439,7 @@ coda::effectiveSize(outcomes)
 #### step 4: save posterior dist and acceptance rate ####
 
 outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
-write.csv(outcomes, file = "./data/posterior_control_2020-04-14.csv", row.names = FALSE)
+write.csv(outcomes, file = "./data/posterior_control_2020-04-17.csv", row.names = FALSE)
 
 
 
