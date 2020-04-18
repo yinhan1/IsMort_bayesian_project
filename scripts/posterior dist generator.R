@@ -148,7 +148,10 @@ outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes) %>%
 
 #### step 1: filter out CO and dummy categorical features ####
 
-is_dummy <- is_data %>% filter(Population == "CO") %>% dummy_co()
+is_dummy <- is_data %>% 
+  filter(Population == "CO") %>% 
+  convert_to_death_status() %>% 
+  dummy_co()
 
 #### step 2: initial values and draws from MH algorithm ####
 
@@ -157,11 +160,11 @@ a1 <- a2 <- 0
 
 outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
 colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
-# outcomes[1,] <- c(
-#   1.097296367,   4.953922497,   1.209283349,  -0.482228059,   0.025895856,   1.832793248,   1.453513721,   
-#   0.735576928,   0.250055192,  -0.015691754,  -0.884285239,  -0.906604992,   -0.521759576,  -0.309321503,
-#   0.158424317,   0.096360510,   0.325413932,   0.152977188,   0.064844156,   0.006385447,  -0.182813001,   
-#   0.042295215 )
+outcomes[1,] <- c(
+  1.097296367,   4.953922497,   1.209283349,  -0.482228059,   0.025895856,   1.832793248,   1.453513721,
+  0.735576928,   0.250055192,  -0.015691754,  -0.884285239,  -0.906604992,   -0.521759576,  -0.309321503,
+  0.158424317,   0.096360510,   0.325413932,   0.152977188,   0.064844156,   0.006385447,  -0.182813001,
+  0.042295215 )
 # 2020_04_12 changed
 # outcomes[1,] <- c(
 #   3.95744600,    0.31253430,    2.67353700,   -0.88902345,    0.18291240,    
@@ -170,9 +173,9 @@ colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
 #   -0.07326436,   -0.15598775,   -0.09338692,   -0.13881100,   -0.79989680,   -0.10959390,    0.02975302
 # )
 # inital values started from last draw of recent draws
-outcomes[1, ] <- read_csv('data/posterior_co_trials_recent_run.csv') %>% 
-  last() %>% 
-  unlist()
+# outcomes[1, ] <- read_csv('data/posterior_co_trials_recent_run.csv') %>% 
+#   last() %>% 
+#   unlist()
 
 #### step 3: for loop of MH algorithm
 start_time <- Sys.time()
@@ -416,7 +419,7 @@ cat(paste0("acceptance rate for shape:  ", a1/B, "\n"))
 cat(paste0("acceptance rate for coefs:  ", a2/B, "\n"))
 
 as.data.frame(outcomes) %>% 
-  mutate(iteration = c(1:nrow(outcomes))) %>% 
+  rowid_to_column('iteration') %>% 
   reshape2::melt(id.vars = "iteration") %>%
   ggplot(aes(x = iteration, y = value, color = variable)) +
   geom_line(size = 0.1) +

@@ -62,7 +62,7 @@ alpha.acf_df %>%
 
 #### CO -------------------------------- ####
 
-co_draws <- read.csv('data/posterior_co_trials_recent_run.csv')
+co_draws <- read.csv('data/posterior_co.csv')
 co_burned <- burn_n_thin_draws(co_draws, jump = 260, burn_at = 1e3)
 
 
