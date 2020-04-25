@@ -299,7 +299,7 @@ rbind(
   ggplot(aes(x = Day, y = est, color = Treatment, ymin = lower, ymax = upper)) +
   geom_line(size = 1.2) +
   geom_errorbar(size = 0.7, alpha = 0.5) +
-  facet_grid(~paste("Age", Age)) +
+  facet_grid(Treatment~paste("Age", Age)) +
   geom_hline(yintercept = 1, linetype ="dashed") +
   labs(x = "Days after spray", y = "Hazard ratio", color = "", subtitle = "Baseline: male") +
   theme_minimal()
@@ -600,12 +600,29 @@ rbind(
   ggplot(aes(x = Day, y = est, color = Treatment, ymin = lower, ymax = upper, group = tag)) +
   geom_line(size = 1.2) +
   geom_errorbar(size = 0.7, alpha = 0.5) +
-  facet_wrap(~paste("Age", Age), nrow = 1) +
+  facet_wrap(Treatment~paste("Age", Age), nrow = 2) +
   geom_hline(yintercept = 1, linetype ="dashed") +
   labs(x = "Days after spray", y = "Hazard ratio", color = "") +
   theme_minimal()
 ```
 
+```{r co median residual life}
+co_median_residual <-
+  apply(
+    co_subgroups, 1,
+    function(row) median_residual_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>%
+  data.frame() %>%
+  add_median_residual_initial(co_subgroups, max_day = max_day) %>%
+  rowwise() %>%
+  mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
+         Sex = ifelse(female == 1, "Female", "Male"),
+         Age = convert_age_back2(age_14, age_28, age_42, age_56)) %>%
+  select(Treatment, Sex, Age, Day, est, lower, upper) %>%
+  filter(est >= 1)
+
+co_median_residual %>% filter(Treatment == "Uninfected") %>% plot_median_residual(type = 2)
+co_median_residual %>% filter(Treatment == "Infected") %>% plot_median_residual(type = 2)
+```
 
 ```{r co immunity}
 # co age 14 female 
