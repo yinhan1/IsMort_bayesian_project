@@ -442,4 +442,407 @@ outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
 write.csv(outcomes, file = "./data/posterior_control_2020-04-17.csv", row.names = FALSE)
 
 
+#### ACO vs CO age 14  ===================================================== ####
+
+#### step 1: dummy categorical features ####
+
+is_dummy <- is_data %>% filter(Age == 14 & Treatment != "Control") %>% convert_to_death_status() %>% 
+  mutate(intercept = 1,
+         infected = ifelse(Treatment=="Infected", 1, 0),
+         female = ifelse(Sex=="Female", 1, 0),
+         aco = ifelse(Population == "ACO", 1, 0),
+         inf_female = infected*female,
+         inf_aco = infected*aco,
+         female_aco = female*aco,
+         inf_f_aco = infected*female*aco) %>% 
+  select(Day,intercept,infected,female,aco,inf_female,inf_aco,female_aco,inf_f_aco)
+
+
+#### step 2: initial values and draws from MH algorithm ####
+
+B <- 100000
+a1 <- a2 <- 0
+
+outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
+colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
+outcomes[1,] = c(0.960430814,  8.762237610, 2.721659267, -1.362909509,  0.191153278, -0.985086017, -0.007630387,  0.331972991,  0.062070329, -0.188106494)
+
+
+#### step 3: for loop of MH algorithm ####
+for(iter in 2:(B+1)){
+  
+  #### ---------------------- MH for shape ---------------------- ####
+  # propose new shape
+  log_shape_proposed = log_shape_sampler14(log_alpha = log(outcomes[iter-1,1]),
+                                          log_theta = log(outcomes[iter-1,2]),
+                                          multiplier = 0.1)
+  
+  loglike = log_likelihood(data = is_dummy,
+                           alpha = exp(log_shape_proposed[1]),
+                           theta = exp(log_shape_proposed[2]),
+                           coefs = outcomes[iter-1,3:ncol(outcomes)])
+  if(loglike == 0){
+    q1 = 0
+  }else{
+    # ratio of posterior 
+    q1_post = 
+      (
+        loglike + 
+          log(prior(alpha = exp(log_shape_proposed[1]),
+                    theta = exp(log_shape_proposed[2]),
+                    coefs = outcomes[iter-1,3:ncol(outcomes)])) -
+          log_likelihood(data = is_dummy,
+                         alpha = outcomes[iter-1,1],
+                         theta = outcomes[iter-1,2],
+                         coefs = outcomes[iter-1,3:ncol(outcomes)]) -
+          log(prior(alpha = exp(log_shape_proposed[1]),
+                    theta = exp(log_shape_proposed[2]),
+                    coefs = outcomes[iter-1,3:ncol(outcomes)]))
+      ) %>% 
+      exp()
+    # ratio of jacobian
+    q1_jacobian = (exp(log_shape_proposed[1])*exp(log_shape_proposed[2])) / (outcomes[iter-1,1]*outcomes[iter-1,2])
+    q1 = (q1_post * q1_jacobian) %>% as.numeric()
+  }
+  # update shape
+  if (runif(1) < q1) {
+    outcomes[iter,1] = exp(log_shape_proposed[1])
+    outcomes[iter,2] = exp(log_shape_proposed[2])
+    a1 = a1 + 1
+  }else{
+    outcomes[iter,1] = outcomes[iter-1,1]
+    outcomes[iter,2] = outcomes[iter-1,2]
+  }
+  
+  #### ---------------------- MH for scale/coefs ---------------------- ####
+  # propose new coefs
+  coefs_proposed = coefs_sampler14(coefs = outcomes[iter-1,3:ncol(outcomes)], 
+                                  multiplier = 0.1)
+  loglike = log_likelihood(data = is_dummy,
+                           alpha = outcomes[iter,1],
+                           theta = outcomes[iter,2],
+                           coefs = coefs_proposed)
+  if(loglike == 0 || is.nan(loglike)){
+    q2 = 0
+  }else{
+    # ratio of posterior 
+    q2 = 
+      (
+        loglike + 
+          log(prior(alpha = outcomes[iter,1],
+                    theta = outcomes[iter,2],
+                    coefs = coefs_proposed)) -
+          log_likelihood(data = is_dummy,
+                         alpha = outcomes[iter,1],
+                         theta = outcomes[iter,2],
+                         coefs = outcomes[iter-1,3:ncol(outcomes)]) -
+          log(prior(alpha = outcomes[iter,1],
+                    theta = outcomes[iter,2],
+                    coefs = outcomes[iter-1,3:ncol(outcomes)]))
+      ) %>% 
+      exp()
+  }
+  # update scale
+  if (runif(1) < q2) {
+    outcomes[iter,3:ncol(outcomes)] = coefs_proposed
+    a2 = a2 + 1
+  }else{
+    outcomes[iter,3:ncol(outcomes)] = outcomes[iter-1,3:ncol(outcomes)]
+  }
+  
+  if (iter %% 10000 == 0) {cat(paste0("iteration: ", iter, "\n"))}
+}
+
+#### step 3: check acceptance rate and convergence ####
+
+cat(paste0("acceptance rate for shape:  ", a1/B, "\n"))
+cat(paste0("acceptance rate for coefs:  ", a2/B, "\n"))
+
+as.data.frame(outcomes) %>% 
+  rowid_to_column('iteration') %>% 
+  reshape2::melt(id.vars = "iteration") %>%
+  ggplot(aes(x = iteration, y = value, color = variable)) +
+  geom_line(size = 0.1) +
+  facet_wrap(~variable, ncol = 3, scales = "free_y") +
+  labs(y = "coefficients") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+coda::effectiveSize(outcomes)
+
+#### step 4: save posterior dist and acceptance rate ####
+
+outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
+write.csv(outcomes, file = "./data/posterior_age14.csv", row.names = FALSE)
+
+
+
+#### ACO vs CO age 28  ===================================================== ####
+
+#### step 1: dummy categorical features ####
+
+is_dummy <- is_data %>% filter(Age == 28 & Treatment != "Control") %>% convert_to_death_status() %>% 
+  mutate(intercept = 1,
+         infected = ifelse(Treatment=="Infected", 1, 0),
+         female = ifelse(Sex=="Female", 1, 0),
+         aco = ifelse(Population == "ACO", 1, 0),
+         inf_female = infected*female,
+         inf_aco = infected*aco,
+         female_aco = female*aco,
+         inf_f_aco = infected*female*aco) %>% 
+  select(Day,intercept,infected,female,aco,inf_female,inf_aco,female_aco,inf_f_aco)
+
+
+#### step 2: initial values and draws from MH algorithm ####
+
+B <- 100000
+a1 <- a2 <- 0
+
+outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
+colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
+outcomes[1,] = c(1.84199832,  2.07958771,  3.19589959, -1.38252288,  0.13366158, -1.05779667, -0.03213688,  0.49963005, -0.24019067,  0.17736787)
+
+
+#### step 3: for loop of MH algorithm ####
+for(iter in 2:(B+1)){
+  
+  #### ---------------------- MH for shape ---------------------- ####
+  # propose new shape
+  log_shape_proposed = log_shape_sampler28(log_alpha = log(outcomes[iter-1,1]),
+                                          log_theta = log(outcomes[iter-1,2]),
+                                          multiplier = 0.2)
+  
+  loglike = log_likelihood(data = is_dummy,
+                           alpha = exp(log_shape_proposed[1]),
+                           theta = exp(log_shape_proposed[2]),
+                           coefs = outcomes[iter-1,3:ncol(outcomes)])
+  if(loglike == 0){
+    q1 = 0
+  }else{
+    # ratio of posterior 
+    q1_post = 
+      (
+        loglike + 
+          log(prior(alpha = exp(log_shape_proposed[1]),
+                    theta = exp(log_shape_proposed[2]),
+                    coefs = outcomes[iter-1,3:ncol(outcomes)])) -
+          log_likelihood(data = is_dummy,
+                         alpha = outcomes[iter-1,1],
+                         theta = outcomes[iter-1,2],
+                         coefs = outcomes[iter-1,3:ncol(outcomes)]) -
+          log(prior(alpha = exp(log_shape_proposed[1]),
+                    theta = exp(log_shape_proposed[2]),
+                    coefs = outcomes[iter-1,3:ncol(outcomes)]))
+      ) %>% 
+      exp()
+    # ratio of jacobian
+    q1_jacobian = (exp(log_shape_proposed[1])*exp(log_shape_proposed[2])) / (outcomes[iter-1,1]*outcomes[iter-1,2])
+    q1 = (q1_post * q1_jacobian) %>% as.numeric()
+  }
+  # update shape
+  if (runif(1) < q1) {
+    outcomes[iter,1] = exp(log_shape_proposed[1])
+    outcomes[iter,2] = exp(log_shape_proposed[2])
+    a1 = a1 + 1
+  }else{
+    outcomes[iter,1] = outcomes[iter-1,1]
+    outcomes[iter,2] = outcomes[iter-1,2]
+  }
+  
+  #### ---------------------- MH for scale/coefs ---------------------- ####
+  # propose new coefs
+  coefs_proposed = coefs_sampler28(coefs = outcomes[iter-1,3:ncol(outcomes)], 
+                                  multiplier = 0.1)
+  loglike = log_likelihood(data = is_dummy,
+                           alpha = outcomes[iter,1],
+                           theta = outcomes[iter,2],
+                           coefs = coefs_proposed)
+  if(loglike == 0 || is.nan(loglike)){
+    q2 = 0
+  }else{
+    # ratio of posterior 
+    q2 = 
+      (
+        loglike + 
+          log(prior(alpha = outcomes[iter,1],
+                    theta = outcomes[iter,2],
+                    coefs = coefs_proposed)) -
+          log_likelihood(data = is_dummy,
+                         alpha = outcomes[iter,1],
+                         theta = outcomes[iter,2],
+                         coefs = outcomes[iter-1,3:ncol(outcomes)]) -
+          log(prior(alpha = outcomes[iter,1],
+                    theta = outcomes[iter,2],
+                    coefs = outcomes[iter-1,3:ncol(outcomes)]))
+      ) %>% 
+      exp()
+  }
+  # update scale
+  if (runif(1) < q2) {
+    outcomes[iter,3:ncol(outcomes)] = coefs_proposed
+    a2 = a2 + 1
+  }else{
+    outcomes[iter,3:ncol(outcomes)] = outcomes[iter-1,3:ncol(outcomes)]
+  }
+  
+  if (iter %% 10000 == 0) {cat(paste0("iteration: ", iter, "\n"))}
+}
+
+#### step 3: check acceptance rate and convergence ####
+
+cat(paste0("acceptance rate for shape:  ", a1/B, "\n"))
+cat(paste0("acceptance rate for coefs:  ", a2/B, "\n"))
+
+as.data.frame(outcomes) %>% 
+  rowid_to_column('iteration') %>% 
+  reshape2::melt(id.vars = "iteration") %>%
+  ggplot(aes(x = iteration, y = value, color = variable)) +
+  geom_line(size = 0.1) +
+  facet_wrap(~variable, ncol = 3, scales = "free_y") +
+  labs(y = "coefficients") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+coda::effectiveSize(outcomes)
+
+#### step 4: save posterior dist and acceptance rate ####
+
+outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
+write.csv(outcomes, file = "./data/posterior_age28.csv", row.names = FALSE)
+
+
+#### ACO vs CO age 42  ===================================================== ####
+
+#### step 1: dummy categorical features ####
+
+is_dummy <- is_data %>% filter(Age == 42 & Treatment != "Control") %>% convert_to_death_status() %>% 
+  mutate(intercept = 1,
+         infected = ifelse(Treatment=="Infected", 1, 0),
+         female = ifelse(Sex=="Female", 1, 0),
+         aco = ifelse(Population == "ACO", 1, 0),
+         inf_female = infected*female,
+         inf_aco = infected*aco,
+         female_aco = female*aco,
+         inf_f_aco = infected*female*aco) %>% 
+  select(Day,intercept,infected,female,aco,inf_female,inf_aco,female_aco,inf_f_aco)
+
+
+#### step 2: initial values and draws from MH algorithm ####
+
+B <- 100000
+a1 <- a2 <- 0
+
+outcomes <- matrix(0, nrow = B + 1, ncol = ncol(is_dummy)-1+2)
+colnames(outcomes) <- c("alpha", "theta", colnames(is_dummy)[-1])
+outcomes[1,] = c(1.85181536,  1.89078570,  2.61350781, -1.11117947,  0.28676957, -0.85252142, -0.14563415,  0.59252715, -0.16215619, -0.04601694 )
+
+
+#### step 3: for loop of MH algorithm ####
+for(iter in 2:(B+1)){
+  
+  #### ---------------------- MH for shape ---------------------- ####
+  # propose new shape
+  log_shape_proposed = log_shape_sampler42(log_alpha = log(outcomes[iter-1,1]),
+                                           log_theta = log(outcomes[iter-1,2]),
+                                           multiplier = 0.2)
+  
+  loglike = log_likelihood(data = is_dummy,
+                           alpha = exp(log_shape_proposed[1]),
+                           theta = exp(log_shape_proposed[2]),
+                           coefs = outcomes[iter-1,3:ncol(outcomes)])
+  if(loglike == 0){
+    q1 = 0
+  }else{
+    # ratio of posterior 
+    q1_post = 
+      (
+        loglike + 
+          log(prior(alpha = exp(log_shape_proposed[1]),
+                    theta = exp(log_shape_proposed[2]),
+                    coefs = outcomes[iter-1,3:ncol(outcomes)])) -
+          log_likelihood(data = is_dummy,
+                         alpha = outcomes[iter-1,1],
+                         theta = outcomes[iter-1,2],
+                         coefs = outcomes[iter-1,3:ncol(outcomes)]) -
+          log(prior(alpha = exp(log_shape_proposed[1]),
+                    theta = exp(log_shape_proposed[2]),
+                    coefs = outcomes[iter-1,3:ncol(outcomes)]))
+      ) %>% 
+      exp()
+    # ratio of jacobian
+    q1_jacobian = (exp(log_shape_proposed[1])*exp(log_shape_proposed[2])) / (outcomes[iter-1,1]*outcomes[iter-1,2])
+    q1 = (q1_post * q1_jacobian) %>% as.numeric()
+  }
+  # update shape
+  if (runif(1) < q1) {
+    outcomes[iter,1] = exp(log_shape_proposed[1])
+    outcomes[iter,2] = exp(log_shape_proposed[2])
+    a1 = a1 + 1
+  }else{
+    outcomes[iter,1] = outcomes[iter-1,1]
+    outcomes[iter,2] = outcomes[iter-1,2]
+  }
+  
+  #### ---------------------- MH for scale/coefs ---------------------- ####
+  # propose new coefs
+  coefs_proposed = coefs_sampler42(coefs = outcomes[iter-1,3:ncol(outcomes)], 
+                                   multiplier = 0.1)
+  loglike = log_likelihood(data = is_dummy,
+                           alpha = outcomes[iter,1],
+                           theta = outcomes[iter,2],
+                           coefs = coefs_proposed)
+  if(loglike == 0 || is.nan(loglike)){
+    q2 = 0
+  }else{
+    # ratio of posterior 
+    q2 = 
+      (
+        loglike + 
+          log(prior(alpha = outcomes[iter,1],
+                    theta = outcomes[iter,2],
+                    coefs = coefs_proposed)) -
+          log_likelihood(data = is_dummy,
+                         alpha = outcomes[iter,1],
+                         theta = outcomes[iter,2],
+                         coefs = outcomes[iter-1,3:ncol(outcomes)]) -
+          log(prior(alpha = outcomes[iter,1],
+                    theta = outcomes[iter,2],
+                    coefs = outcomes[iter-1,3:ncol(outcomes)]))
+      ) %>% 
+      exp()
+  }
+  # update scale
+  if (runif(1) < q2) {
+    outcomes[iter,3:ncol(outcomes)] = coefs_proposed
+    a2 = a2 + 1
+  }else{
+    outcomes[iter,3:ncol(outcomes)] = outcomes[iter-1,3:ncol(outcomes)]
+  }
+  
+  if (iter %% 10000 == 0) {cat(paste0("iteration: ", iter, "\n"))}
+}
+
+#### step 3: check acceptance rate and convergence ####
+
+cat(paste0("acceptance rate for shape:  ", a1/B, "\n"))
+cat(paste0("acceptance rate for coefs:  ", a2/B, "\n"))
+
+as.data.frame(outcomes) %>% 
+  rowid_to_column('iteration') %>% 6
+  reshape2::melt(id.vars = "iteration") %>%
+  ggplot(aes(x = iteration, y = value, color = variable)) +
+  geom_line(size = 0.1) +
+  facet_wrap(~variable, ncol = 3, scales = "free_y") +
+  labs(y = "coefficients") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+coda::effectiveSize(outcomes)
+
+#### step 4: save posterior dist and acceptance rate ####
+
+outcomes = rbind(c(rep(a1/B, 2), rep(a2/B, ncol(outcomes)-2)), outcomes)
+write.csv(outcomes, file = "./data/posterior_age42.csv", row.names = FALSE)
+
+
 

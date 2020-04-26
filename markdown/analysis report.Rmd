@@ -13,7 +13,7 @@ header-includes:
 - \usepackage{graphicx}
 - \usepackage{float}
 editor_options:
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 ```{r setup knit, include=FALSE}
@@ -32,10 +32,289 @@ library(magrittr)
 library(ggsci)
 library(kableExtra)
 
-source("../scripts/functions.R")
+source("./scripts/functions.R")
 
-raw_data <- readxl::read_excel("../data/IS_data.xlsx") %>% clean_data(c("Day after spray","Deaths"))
+raw_data <- readxl::read_excel("./data/IS_data.xlsx") %>% clean_data(c("Day after spray","Deaths"))
 ```
+
+
+## Age 14 {.tabset}
+
+### Raw data
+
+```{r control raw data plot}
+raw_14 <- raw_data %>% filter(Age==14 & Treatment!="Control") %>% droplevels()
+raw_14 %>% get_survival_percent() %>% plot_survival_percent() + facet_grid(~Sex)
+```
+
+### Model 
+
+```{r control thin draws}
+posterior_dist <- read.csv("./data/posterior_age14.csv") %>% burn_n_thin_draws(jump = 220, burn_at = 1)
+# posterior_dist %>%
+#   reshape2::melt() %>%
+#   ggplot(aes(x = value)) +
+#   geom_density() +
+#   facet_wrap(~variable, scales = "free", ncol = 3)
+apply(posterior_dist, 2, function(col) quantile(col, probs = c(0.025,0.5,0.975))) %>% 
+  t() %>% 
+  set_colnames(c("Lower","Estimate","Upper")) %>% 
+  kable()
+```
+
+```{r control dummy columns}
+dummy_14 <- 
+  raw_14 %>% 
+  mutate(intercept = 1,
+         infected = ifelse(Treatment=="Infected", 1, 0),
+         female = ifelse(Sex=="Female", 1, 0),
+         aco = ifelse(Population == "ACO", 1, 0),
+         inf_female = infected*female,
+         inf_aco = infected*aco,
+         female_aco = female*aco,
+         inf_f_aco = infected*female*aco) %>% 
+  select(Day,intercept,infected,female,aco,inf_female,inf_aco,female_aco,inf_f_aco)
+```
+
+```{r control survival function}
+max_day <- 120
+subgroups_14 <- dummy_14 %>% dplyr::select(-Day) %>% unique()
+
+survival_14 <- 
+  apply(subgroups_14, 1, function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>%
+  data.frame() %>% 
+  add_survival_initial(subgroups_14, max_day = max_day) %>% 
+  rowwise() %>% 
+  mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
+         Sex = ifelse(female == 1, "Female", "Male"),
+         Population = ifelse(aco == 1, "ACO", "CO"),
+         Age = 14) %>% 
+  select(Treatment, Sex, Population, Age, Day, est, lower, upper)
+
+survival_14 %>% plot_survival_function() + facet_grid(~Sex) + xlim(14,120)
+```
+
+```{r age 14 immunity}
+aco_female = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_14 %>% filter(aco==1 & female==1 & infected==1), 
+  s2 = subgroups_14 %>% filter(aco==1 & female==1 & infected==0)
+) %>% mutate(tag = "ACO Female", Sex = "Female", Population = "ACO")
+
+aco_male = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_14 %>% filter(aco==1 & female==0 & infected==1), 
+  s2 = subgroups_14 %>% filter(aco==1 & female==0 & infected==0)
+) %>% mutate(tag = "ACO Male", Sex = "Male", Population = "ACO")
+
+co_female = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_14 %>% filter(aco==0 & female==1 & infected==1), 
+  s2 = subgroups_14 %>% filter(aco==0 & female==1 & infected==0)
+) %>% mutate(tag = "CO Female", Sex = "Female", Population = "CO")
+
+co_male = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_14 %>% filter(aco==0 & female==0 & infected==1), 
+  s2 = subgroups_14 %>% filter(aco==0 & female==0 & infected==0)
+) %>% mutate(tag = "CO Male", Sex = "Male", Population = "CO")
+
+age14_immunity = 
+  rbind(aco_female,aco_male, co_female, co_male) %>% 
+  set_colnames(c("lower","est","upper","tag","Sex","Population")) %>% 
+  mutate(Age = "14")
+```
+
+
+
+
+## Age 28 {.tabset}
+
+### Raw data
+
+```{r control raw data plot}
+raw_28 <- raw_data %>% filter(Age==28 & Treatment!="Control") %>% droplevels()
+raw_28 %>% get_survival_percent() %>% plot_survival_percent() + facet_grid(~Sex)
+```
+
+### Model 
+
+```{r control thin draws}
+posterior_dist <- read.csv("./data/posterior_age28.csv") %>% burn_n_thin_draws(jump = 220, burn_at = 1)
+# posterior_dist %>%
+#   reshape2::melt() %>%
+#   ggplot(aes(x = value)) +
+#   geom_density() +
+#   facet_wrap(~variable, scales = "free", ncol = 3)
+apply(posterior_dist, 2, function(col) quantile(col, probs = c(0.025,0.5,0.975))) %>% 
+  t() %>% 
+  set_colnames(c("Lower","Estimate","Upper")) %>% 
+  kable()
+```
+
+```{r control dummy columns}
+dummy_28 <- 
+  raw_28 %>% 
+  mutate(intercept = 1,
+         infected = ifelse(Treatment=="Infected", 1, 0),
+         female = ifelse(Sex=="Female", 1, 0),
+         aco = ifelse(Population == "ACO", 1, 0),
+         inf_female = infected*female,
+         inf_aco = infected*aco,
+         female_aco = female*aco,
+         inf_f_aco = infected*female*aco) %>% 
+  select(Day,intercept,infected,female,aco,inf_female,inf_aco,female_aco,inf_f_aco)
+```
+
+```{r control survival function}
+max_day <- 100
+subgroups_28 <- dummy_28 %>% dplyr::select(-Day) %>% unique()
+
+survival_28 <- 
+  apply(subgroups_28, 1, function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>%
+  data.frame() %>% 
+  add_survival_initial(subgroups_28, max_day = max_day) %>% 
+  rowwise() %>% 
+  mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
+         Sex = ifelse(female == 1, "Female", "Male"),
+         Population = ifelse(aco == 1, "ACO", "CO"),
+         Age = 28) %>% 
+  select(Treatment, Sex, Population, Age, Day, est, lower, upper)
+
+survival_28 %>% plot_survival_function() + facet_grid(~Sex) + xlim(14,120)
+```
+
+```{r age 14 immunity}
+aco_female = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_28 %>% filter(aco==1 & female==1 & infected==1), 
+  s2 = subgroups_28 %>% filter(aco==1 & female==1 & infected==0)
+) %>% mutate(tag = "ACO Female", Sex = "Female", Population = "ACO")
+
+aco_male = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_28 %>% filter(aco==1 & female==0 & infected==1), 
+  s2 = subgroups_28 %>% filter(aco==1 & female==0 & infected==0)
+) %>% mutate(tag = "ACO Male", Sex = "Male", Population = "ACO")
+
+co_female = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_28 %>% filter(aco==0 & female==1 & infected==1), 
+  s2 = subgroups_28 %>% filter(aco==0 & female==1 & infected==0)
+) %>% mutate(tag = "CO Female", Sex = "Female", Population = "CO")
+
+co_male = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_28 %>% filter(aco==0 & female==0 & infected==1), 
+  s2 = subgroups_28 %>% filter(aco==0 & female==0 & infected==0)
+) %>% mutate(tag = "CO Male", Sex = "Male", Population = "CO")
+
+age28_immunity = 
+  rbind(aco_female,aco_male, co_female, co_male) %>% 
+  set_colnames(c("lower","est","upper","tag","Sex","Population")) %>% 
+  mutate(Age = "28")
+```
+
+
+
+
+
+
+## Age 42 {.tabset}
+
+### Raw data
+
+```{r control raw data plot}
+raw_42 <- raw_data %>% filter(Age==42 & Treatment!="Control") %>% droplevels()
+raw_42 %>% get_survival_percent() %>% plot_survival_percent() + facet_grid(~Sex)
+```
+
+### Model 
+
+```{r control thin draws}
+posterior_dist <- read.csv("./data/posterior_age42.csv") %>% burn_n_thin_draws(jump = 220, burn_at = 1)
+# posterior_dist %>%
+#   reshape2::melt() %>%
+#   ggplot(aes(x = value)) +
+#   geom_density() +
+#   facet_wrap(~variable, scales = "free", ncol = 3)
+apply(posterior_dist, 2, function(col) quantile(col, probs = c(0.025,0.5,0.975))) %>% 
+  t() %>% 
+  set_colnames(c("Lower","Estimate","Upper")) %>% 
+  kable()
+```
+
+```{r control dummy columns}
+dummy_42 <- 
+  raw_42 %>% 
+  mutate(intercept = 1,
+         infected = ifelse(Treatment=="Infected", 1, 0),
+         female = ifelse(Sex=="Female", 1, 0),
+         aco = ifelse(Population == "ACO", 1, 0),
+         inf_female = infected*female,
+         inf_aco = infected*aco,
+         female_aco = female*aco,
+         inf_f_aco = infected*female*aco) %>% 
+  select(Day,intercept,infected,female,aco,inf_female,inf_aco,female_aco,inf_f_aco)
+```
+
+```{r control survival function}
+max_day <- 100
+subgroups_42 <- dummy_42 %>% dplyr::select(-Day) %>% unique()
+
+survival_42 <- 
+  apply(subgroups_42, 1, function(row) survival_interval_calculator(posterior_dist, x_fit = row, max_day = max_day)) %>%
+  data.frame() %>% 
+  add_survival_initial(subgroups_42, max_day = max_day) %>% 
+  rowwise() %>% 
+  mutate(Treatment = ifelse(infected == 1, "Infected", "Uninfected"),
+         Sex = ifelse(female == 1, "Female", "Male"),
+         Population = ifelse(aco == 1, "ACO", "CO"),
+         Age = 42) %>% 
+  select(Treatment, Sex, Population, Age, Day, est, lower, upper)
+
+survival_42 %>% plot_survival_function() + facet_grid(~Sex) + xlim(14, 120)
+```
+
+```{r age 14 immunity}
+aco_female = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_42 %>% filter(aco==1 & female==1 & infected==1), 
+  s2 = subgroups_42 %>% filter(aco==1 & female==1 & infected==0)
+) %>% mutate(tag = "ACO Female", Sex = "Female", Population = "ACO")
+
+aco_male = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_42 %>% filter(aco==1 & female==0 & infected==1), 
+  s2 = subgroups_42 %>% filter(aco==1 & female==0 & infected==0)
+) %>% mutate(tag = "ACO Male", Sex = "Male", Population = "ACO")
+
+co_female = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_42 %>% filter(aco==0 & female==1 & infected==1), 
+  s2 = subgroups_42 %>% filter(aco==0 & female==1 & infected==0)
+) %>% mutate(tag = "CO Female", Sex = "Female", Population = "CO")
+
+co_male = get_change_on_sigma(
+  data = posterior_dist,
+  s1 = subgroups_42 %>% filter(aco==0 & female==0 & infected==1), 
+  s2 = subgroups_42 %>% filter(aco==0 & female==0 & infected==0)
+) %>% mutate(tag = "CO Male", Sex = "Male", Population = "CO")
+
+age42_immunity = 
+  rbind(aco_female,aco_male, co_female, co_male) %>% 
+  set_colnames(c("lower","est","upper","tag","Sex","Population")) %>% 
+  mutate(Age = "42")
+```
+
+
+
+
+
+
+
+
+
 
 ## Control vs Uninfected {.tabset}
 
