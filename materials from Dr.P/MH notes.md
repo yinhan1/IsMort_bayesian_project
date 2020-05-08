@@ -5,7 +5,7 @@
 | ...       |          |          |           |                         |                       |                      |                      |
 | 20,000    |          |          |           |                         |                       |                      |                      |
 
-#### Step 1 -- MH on $\alpha,\beta$
+#### Step 1 -- MH on $\alpha,\theta$
 
 - proposed $log(\alpha^{*},\beta^{*})$ from old $log(\alpha^{t-1},\theta^{t-1})$
 - compute $r = \text{post}(\alpha^{*},\beta^{*}, [\beta^{t-1}]) / \text{post}(\alpha^{t-1},\beta^{t-1}, [\beta^{t-1}])$ and the jacobian
