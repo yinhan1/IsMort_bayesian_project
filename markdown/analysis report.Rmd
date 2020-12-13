@@ -37,6 +37,56 @@ source("./scripts/functions.R")
 raw_data <- readxl::read_excel("./data/IS_data.xlsx") %>% clean_data(c("Day after spray","Deaths"))
 ```
 
+## Plot Edited 12/13/20
+
+```{r}
+## plot edited 12/13/2020 
+data_percent <- 
+  raw_data %>% 
+  filter(Treatment == 'Infected' & Age %in% c('14','28','42') ) %>% 
+  group_by(Population, Treatment, Age, Day) %>% 
+  summarise(Deaths = sum(Deaths)) %>% 
+  group_by(Population, Treatment, Age) %>% 
+  mutate(Total = sum(Deaths),
+         Deaths = cumsum(Deaths)) %>% 
+  ungroup() %>% 
+  mutate(Percent = 1 - Deaths/Total) %>% 
+  select(-c(Total,Deaths))
+
+bind_rows(
+  data_percent, 
+  data_percent %>% 
+    select(-c(Percent,Day)) %>% 
+    unique() %>% 
+    mutate(Day = 1, Percent = 1)
+) %>% 
+  filter(Percent > 0.001) %>% 
+  mutate(tag = paste(Population, Age)) %>% 
+  ggplot(aes(x = Day, y = Percent*100, color = Population, linetype = Age)) +
+  geom_line(size = 1) +
+  scale_color_manual(
+    'Population',
+    values = c('ACO' = 'brown3', 'CO' = 'grey30'),
+  ) +
+  scale_linetype_manual(
+    'Age at Spray',
+    values = c('14' = 'solid', '28' = 'dashed', '42' = 'dotted')
+  ) +
+  theme_minimal() +
+  theme(legend.position = c(0.75, 0.6)) +
+  labs(x = "Days after spray", y = "Survival percent (%)", color = "", linetype = "")
+```
+
+
+
+
+
+
+
+
+
+
+
 
 ## Age 14 {.tabset}
 
